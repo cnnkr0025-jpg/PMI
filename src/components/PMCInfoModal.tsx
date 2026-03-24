@@ -67,7 +67,7 @@ export const PMCInfoModal: React.FC<PMCInfoModalProps> = ({ isOpen, onClose }) =
               </div>
               <div className="space-y-2">
                 <p className="text-gray-700 dark:text-gray-300 font-semibold">
-                  💡 여러 모델을 섞어 담을수록 적립률이 올라갑니다!
+                  여러 모델을 섞어 담을수록 적립률이 올라갑니다!
                 </p>
                 <div className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
                   <p>• 총 선택 수량 1개: PMC 적립 없음 (0%)</p>
@@ -77,7 +77,7 @@ export const PMCInfoModal: React.FC<PMCInfoModalProps> = ({ isOpen, onClose }) =
                   <p>• 총 선택 수량 5개 이상: 10% 적립 (최대)</p>
                 </div>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 pt-2 border-t border-yellow-200 dark:border-yellow-700">
-                  ⚠️ 고가 모델(Opus 등)은 적립률이 5%로 제한됩니다 (역마진 방지)
+                  고가 모델(Opus 등)은 적립률이 5%로 제한됩니다 (역마진 방지)
                 </p>
               </div>
             </section>
@@ -214,7 +214,7 @@ export const PMCInfoModal: React.FC<PMCInfoModalProps> = ({ isOpen, onClose }) =
             {/* 안내 메시지 */}
             <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 border border-blue-200 dark:border-blue-800">
               <p className="text-sm text-blue-800 dark:text-blue-200">
-                💡 <strong>팁:</strong> 여러 모델을 섞어 담으면 적립률이 올라갑니다! 
+                <strong>팁:</strong> 여러 모델을 섞어 담으면 적립률이 올라갑니다! 
                 총 5개 이상 선택 시 최대 10% 적립 (고가 모델 제외)
               </p>
             </div>

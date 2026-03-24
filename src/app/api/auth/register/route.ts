@@ -97,37 +97,13 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // 자동 로그인된 경우 (이미 존재하는 계정)
+    // 이미 존재하는 계정인 경우 — 이메일 열거 방지를 위해 일반 성공 응답과 동일하게 처리
     if (result.autoLogin) {
-      const user = await AuthService.getCurrentUser();
-      
-      if (user) {
-        const sessionToken = await createSecureToken({
-          userId: user.id,
-          email: user.email,
-          name: user.name,
-        });
-
-        const response = NextResponse.json({
-          success: true,
-          autoLogin: true,
-          user: {
-            id: user.id,
-            email: user.email,
-            name: user.name,
-          }
-        });
-
-        response.cookies.set('session', sessionToken, {
-          httpOnly: true,
-          secure: process.env.NODE_ENV === 'production',
-          sameSite: 'lax',
-          maxAge: 7 * 24 * 60 * 60,
-          path: '/',
-        });
-
-        return response;
-      }
+      return NextResponse.json({
+        success: true,
+        requiresEmailVerification: true,
+        message: '이메일 인증이 필요합니다. 이메일을 확인해주세요.',
+      });
     }
 
     // 일반 회원가입 성공 - 로그인 필요

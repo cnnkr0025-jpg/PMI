@@ -91,9 +91,9 @@ async function handleCallback() {
 
       // PKCE 표준 경로: Supabase SDK가 저장한 code_verifier를 사용해 세션 교환
       const { data: exchangeData, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+      const accessToken = exchangeData.session?.access_token || await readClientSessionAccessToken();
 
-      if (!exchangeError) {
-        const accessToken = exchangeData.session?.access_token;
+      if (!exchangeError || accessToken) {
         if (accessToken) {
           const ok = await callSocialSessionAPI(accessToken);
           if (ok) {
@@ -109,7 +109,7 @@ async function handleCallback() {
 
       // 일부 환경 fallback: 서버 code 교환 경로 시도
       console.warn('[auth/callback] PKCE exchange failed, trying server fallback...', exchangeError?.message);
-      const ok = await callCodeExchangeAPI(code);
+      const ok = await callCodeExchangeAPI(code, readStoredCodeVerifier());
       if (ok) {
         console.log('[auth/callback] Server fallback exchange successful, redirecting to /chat');
         window.location.replace('/chat');
@@ -122,11 +122,45 @@ async function handleCallback() {
     }
 
     // 4) 아무것도 없으면 로그인으로
+    const existingAccessToken = await readClientSessionAccessToken();
+    if (existingAccessToken) {
+      const ok = await callSocialSessionAPI(existingAccessToken);
+      if (ok) {
+        console.log('[auth/callback] Existing client session detected, redirecting to /chat');
+        window.location.replace('/chat');
+        return;
+      }
+    }
     console.log('[auth/callback] No token or code found');
     window.location.replace('/login?error=no_token');
   } catch (err) {
     console.error('[auth/callback] Unexpected error:', err);
     window.location.replace('/login?error=callback_error');
+  }
+}
+
+async function readClientSessionAccessToken(): Promise<string | null> {
+  try {
+    const { data, error } = await supabase.auth.getSession();
+    if (error) {
+      console.warn('[auth/callback] Failed to read client session:', error.message);
+      return null;
+    }
+    return data.session?.access_token || null;
+  } catch (err) {
+    console.warn('[auth/callback] Unexpected getSession failure:', err);
+    return null;
+  }
+}
+
+function readStoredCodeVerifier(): string | undefined {
+  try {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    if (!supabaseUrl) return undefined;
+    const projectRef = new URL(supabaseUrl).hostname.split('.')[0];
+    return window.localStorage.getItem(`sb-${projectRef}-auth-token-code-verifier`) || undefined;
+  } catch {
+    return undefined;
   }
 }
 
@@ -144,28 +178,52 @@ async function callSocialSessionAPI(accessToken: string): Promise<boolean> {
       console.error('[auth/callback] social-session API error:', res.status, body);
       return false;
     }
-    return true;
+    return await confirmServerSession();
   } catch (err) {
     console.error('[auth/callback] social-session fetch error:', err);
     return false;
   }
 }
 
+async function confirmServerSession(): Promise<boolean> {
+  for (let i = 0; i < 4; i += 1) {
+    try {
+      const res = await fetch('/api/auth/session', {
+        method: 'GET',
+        credentials: 'include',
+        cache: 'no-store',
+      });
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        if (data?.authenticated) {
+          return true;
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 120));
+  }
+
+  return false;
+}
+
 /** code를 서버로 보내서 서버사이드에서 token 교환 + 세션 쿠키 설정 */
-async function callCodeExchangeAPI(code: string): Promise<boolean> {
+async function callCodeExchangeAPI(code: string, codeVerifier?: string): Promise<boolean> {
   try {
     const res = await fetch('/api/auth/social-session', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify({ code }),
+      body: JSON.stringify({ code, code_verifier: codeVerifier }),
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       console.error('[auth/callback] code exchange API error:', res.status, body);
       return false;
     }
-    return true;
+    return await confirmServerSession();
   } catch (err) {
     console.error('[auth/callback] code exchange fetch error:', err);
     return false;

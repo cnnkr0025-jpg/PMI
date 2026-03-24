@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { Sparkles, Loader2, Lock } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { useStore } from '@/store';
 import { shallow } from 'zustand/shallow';
+import { toast } from 'sonner';
 
 type Props = {
   question: string;
@@ -12,9 +13,10 @@ type Props = {
   speechLevel?: string;
   language?: string;
   compact?: boolean;
+  autoAnalyzeToken?: number;
 };
 
-export const SmartRouter: React.FC<Props> = ({ question, models, speechLevel, language, compact }) => {
+export const SmartRouter: React.FC<Props> = ({ question, models, speechLevel, language, compact, autoAnalyzeToken }) => {
   const { smartRouterPurchased, smartRouterFreeUsed, setSmartRouterFreeUsed } = useStore(
     (state) => ({
       smartRouterPurchased: state.smartRouterPurchased,
@@ -26,21 +28,45 @@ export const SmartRouter: React.FC<Props> = ({ question, models, speechLevel, la
   const [recommendation, setRecommendation] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [isPremium, setIsPremium] = useState(false);
+  const lastAnalyzedKeyRef = useRef<string | null>(null);
+  const activeRequestKeyRef = useRef<string | null>(null);
+  const lastAutoAnalyzeTokenRef = useRef(0);
+  const abortControllerRef = useRef<AbortController | null>(null);
   const routerModels = useMemo(
     () => models.map((m) => ({ id: m.id, displayName: m.displayName, description: m.description || '' })),
     [models]
   );
+  const normalizedQuestion = useMemo(
+    () => question.replace(/\s+/g, ' ').trim().toLowerCase(),
+    [question]
+  );
 
   const handleAnalyze = useCallback(async (premium = false) => {
-    if (!question.trim()) return;
+    if (!normalizedQuestion) return;
+    const requestKey = `${premium ? 'premium' : 'basic'}:${normalizedQuestion}`;
+
+    if (activeRequestKeyRef.current === requestKey) {
+      return;
+    }
+
+    if (lastAnalyzedKeyRef.current === requestKey) {
+      toast.info('같은 질문은 연속으로 다시 분석할 수 없어요. 질문을 수정한 뒤 다시 시도해주세요.');
+      return;
+    }
+
+    // Cancel any previous in-flight request
+    if (abortControllerRef.current) abortControllerRef.current.abort();
+    abortControllerRef.current = new AbortController();
+
     setLoading(true);
     setIsPremium(premium);
-    
+    activeRequestKeyRef.current = requestKey;
+
     // 프리미엄 최초 1회 무료 사용 처리
     if (premium && !smartRouterPurchased && !smartRouterFreeUsed) {
       setSmartRouterFreeUsed(true);
     }
-    
+
     try {
       const res = await fetch('/api/smart-router', {
         method: 'POST',
@@ -52,16 +78,27 @@ export const SmartRouter: React.FC<Props> = ({ question, models, speechLevel, la
           language: language || 'ko',
           premium,
         }),
+        signal: abortControllerRef.current.signal,
       });
       if (!res.ok) throw new Error('분석 실패');
       const data = await res.json();
       setRecommendation(data.recommendation);
-    } catch {
-      setRecommendation('분석에 실패했습니다. 다시 시도해주세요.');
+      lastAnalyzedKeyRef.current = requestKey;
+    } catch (e: any) {
+      if (e?.name !== 'AbortError') {
+        setRecommendation('분석에 실패했습니다. 다시 시도해주세요.');
+      }
     } finally {
+      activeRequestKeyRef.current = null;
       setLoading(false);
     }
-  }, [question, routerModels, speechLevel, language, smartRouterPurchased, smartRouterFreeUsed, setSmartRouterFreeUsed]);
+  }, [normalizedQuestion, question, routerModels, speechLevel, language, smartRouterPurchased, smartRouterFreeUsed, setSmartRouterFreeUsed]);
+
+  useEffect(() => {
+    if (!autoAnalyzeToken || !normalizedQuestion || autoAnalyzeToken === lastAutoAnalyzeTokenRef.current) return;
+    lastAutoAnalyzeTokenRef.current = autoAnalyzeToken;
+    void handleAnalyze(false);
+  }, [autoAnalyzeToken, normalizedQuestion, handleAnalyze]);
 
   if (!question.trim() || models.length === 0) return null;
 
@@ -101,7 +138,7 @@ export const SmartRouter: React.FC<Props> = ({ question, models, speechLevel, la
 
       {recommendation && (
         <div className={cn('mt-2 text-sm text-gray-800', isPremium ? 'whitespace-pre-wrap' : '')}>
-          <span className="font-semibold text-indigo-600">💡 </span>
+          <span className="font-semibold text-indigo-600">추천</span>{' '}
           {recommendation}
         </div>
       )}

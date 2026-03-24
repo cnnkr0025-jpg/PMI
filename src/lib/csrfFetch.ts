@@ -102,6 +102,9 @@ export async function csrfFetch(
     return first;
   }
 
+  // 403 응답 body를 소비하여 HTTP 연결 및 메모리 해제
+  try { await first.body?.cancel(); } catch {}
+
   // 403일 때 1회만 토큰을 갱신 후 재시도
   const refreshed = await fetchCsrfToken();
   setCachedCsrfToken(refreshed);

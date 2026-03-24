@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PHASE_EXPORT, PHASE_PRODUCTION_BUILD } from 'next/constants';
+import { createClient } from '@supabase/supabase-js';
 import { RateLimiter, getClientIp } from '@/lib/rateLimit';
+import { verifySession } from '@/lib/apiAuth';
 import { apiKeyManager, parseRateLimitError } from '@/lib/apiKeyRotation';
 import { fetchWithRetry } from '@/utils/fetchWithRetry';
 
@@ -49,6 +51,73 @@ const GROK_IMAGE_IDS = new Set(['grokImagine', 'grok2image']);
 const SORA_VIDEO_IDS = new Set(['sora2_720p', 'sora2pro_720p', 'sora2pro_1024p']);
 const GROK_VIDEO_IDS = new Set(['grokImagineVideo']);
 
+function getServerDb() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+
+  if (!supabaseUrl || !supabaseServiceKey) {
+    throw new Error('[ERR_CONFIG_02] Supabase server config missing.');
+  }
+
+  return createClient(supabaseUrl, supabaseServiceKey);
+}
+
+async function consumeChatCredit(userId: string, modelId: string): Promise<boolean> {
+  const db = getServerDb();
+  const walletResult = await db.from('user_wallets').select('credits').eq('user_id', userId).single();
+  const credits = (walletResult.data?.credits as Record<string, number> | null) || {};
+  const available = Number(credits[modelId] || 0);
+
+  if (!Number.isFinite(available) || available <= 0) {
+    return false;
+  }
+
+  const nextCredits = { ...credits, [modelId]: available - 1 };
+  if (nextCredits[modelId] <= 0) {
+    delete nextCredits[modelId];
+  }
+
+  const updateResult = await db
+    .from('user_wallets')
+    .update({ credits: nextCredits, updated_at: new Date().toISOString() })
+    .eq('user_id', userId)
+    .select('user_id')
+    .limit(1);
+
+  if (updateResult.error) {
+    throw new Error('[ERR_CREDIT_01] Failed to consume credit.');
+  }
+
+  await db.from('transactions').insert({
+    user_id: userId,
+    type: 'usage',
+    model_id: modelId,
+    credits: { [modelId]: -1 },
+    description: 'AI 응답 사용',
+  });
+
+  return true;
+}
+
+async function refundChatCredit(userId: string, modelId: string): Promise<void> {
+  const db = getServerDb();
+  const walletResult = await db.from('user_wallets').select('credits').eq('user_id', userId).single();
+  const credits = (walletResult.data?.credits as Record<string, number> | null) || {};
+  const nextCredits = { ...credits, [modelId]: (Number(credits[modelId] || 0) || 0) + 1 };
+
+  await db
+    .from('user_wallets')
+    .update({ credits: nextCredits, updated_at: new Date().toISOString() })
+    .eq('user_id', userId);
+
+  await db.from('transactions').insert({
+    user_id: userId,
+    type: 'purchase',
+    credits: { [modelId]: 1 },
+    description: 'AI 오류 보상 환불',
+  });
+}
+
 const OPENAI_MODEL_MAP: { [key: string]: string } = {
   'gpt4o': 'gpt-4o',
   'gpt41': 'gpt-4.1',
@@ -56,10 +125,9 @@ const OPENAI_MODEL_MAP: { [key: string]: string } = {
   'gpt41nano': 'gpt-4.1-nano',
   'gpt5': 'gpt-5',
   'gpt51': 'gpt-5.1',
-  'gpt51chat': 'gpt-5.1-chat-latest',
   'gpt52': 'gpt-5.2',
-  'gpt52chat': 'gpt-5.2-chat-latest',
-  'gpt52pro': 'gpt-5.2-pro',
+  'gpt53instant': 'gpt-5.3-chat-latest',
+  'gpt54': 'gpt-5.4',
   'o3': 'o3',
   'o3mini': 'o3-mini',
   'o4mini': 'o4-mini',
@@ -154,60 +222,58 @@ function extractBase64(dataUrl: string): { mime: string; base64: string } | null
 
 // 이미지 생성 API 호출 (gpt-image-1, dall-e-3 등)
 async function callImageGeneration(prompt: string, model: string): Promise<string> {
-  return apiKeyManager.enqueueRequest('openai', async () => {
-    const apiKey = apiKeyManager.getAvailableKey('openai');
-    
-    if (!apiKey) {
-      throw new Error('OpenAI API key not configured.');
-    }
+  const apiKey = apiKeyManager.getAvailableKey('openai');
+  
+  if (!apiKey) {
+    throw new Error('OpenAI API key not configured.');
+  }
 
+  if (process.env.NODE_ENV !== 'production') {
+    console.log(`[Image Gen] Generating image with ${model}, prompt:`, prompt);
+  }
+
+  let response: Response;
+  try {
+    response = await fetchWithRetry('https://api.openai.com/v1/images/generations', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: model === 'gpt-image-1' ? 'gpt-image-1' : 'dall-e-3',
+        prompt: prompt,
+        n: 1,
+        size: '1024x1024',
+        quality: model === 'gpt-image-1' ? 'hd' : 'standard'
+      })
+    }, {
+      timeout: DEFAULT_API_TIMEOUT_MS,
+      maxRetries: DEFAULT_API_RETRIES,
+      retryDelay: DEFAULT_RETRY_DELAY_MS
+    });
+  } catch (fetchError: any) {
+    if (fetchError?.name === 'AbortError') {
+      throw new Error('MODEL_RESPONSE_TIMEOUT');
+    }
+    throw new Error(`Image API call failed: ${fetchError?.message || 'Unknown error'}`);
+  }
+
+  if (!response.ok) {
+    const errorData = await response.json();
     if (process.env.NODE_ENV !== 'production') {
-      console.log(`[Image Gen] Generating image with ${model}, prompt:`, prompt);
+      console.error('[Image Gen] Error response:', errorData);
     }
+    throw new Error(errorData.error?.message || 'Image API error');
+  }
 
-    let response: Response;
-    try {
-      response = await fetchWithRetry('https://api.openai.com/v1/images/generations', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
-        },
-        body: JSON.stringify({
-          model: model === 'gpt-image-1' ? 'gpt-image-1' : 'dall-e-3',
-          prompt: prompt,
-          n: 1,
-          size: '1024x1024',
-          quality: model === 'gpt-image-1' ? 'hd' : 'standard'
-        })
-      }, {
-        timeout: DEFAULT_API_TIMEOUT_MS,
-        maxRetries: DEFAULT_API_RETRIES,
-        retryDelay: DEFAULT_RETRY_DELAY_MS
-      });
-    } catch (fetchError: any) {
-      if (fetchError?.name === 'AbortError') {
-        throw new Error('MODEL_RESPONSE_TIMEOUT');
-      }
-      throw new Error(`Image API call failed: ${fetchError?.message || 'Unknown error'}`);
-    }
+  const data = await response.json();
+  if (process.env.NODE_ENV !== 'production') {
+    console.log(`[Image Gen] Image generated successfully with ${model}`);
+  }
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      if (process.env.NODE_ENV !== 'production') {
-        console.error('[Image Gen] Error response:', errorData);
-      }
-      throw new Error(errorData.error?.message || 'Image API error');
-    }
-
-    const data = await response.json();
-    if (process.env.NODE_ENV !== 'production') {
-      console.log(`[Image Gen] Image generated successfully with ${model}`);
-    }
-
-    // 이미지 URL 반환
-    return data.data[0].url;
-  });
+  // 이미지 URL 반환
+  return data.data[0].url;
 }
 
 // OpenAI API 호출 (키 로테이션 및 큐 시스템 지원)
@@ -311,7 +377,7 @@ async function executeOpenAIRequest(model: string, messages: any[], apiKey: stri
   };
   
   // GPT-5/5.1 및 코딩 모델용 시스템 메시지 추가
-  const isGPT5Series = model === 'gpt5' || model === 'gpt51' || model === 'gpt52';
+  const isGPT5Series = model === 'gpt5' || model === 'gpt51' || model === 'gpt52' || model === 'gpt53instant' || model === 'gpt54';
   const isCodingModel = model === 'codex' || model === 'gpt5codex' || model === 'gpt51codex';
   
   // 대화의 첫 메시지인지 확인 (시스템 메시지 제외하고 사용자 메시지가 1개인 경우)
@@ -557,7 +623,7 @@ async function callGemini(model: string, messages: any[], userAttachments?: User
     }
   }
 
-  // generateContent 엔드포인트 사용 (비스트리밍 - Netlify 타임아웃 방지)
+  // generateContent 엔드포인트 사용 (비스트리밍 - Netlify 호환)
   let response: Response;
   try {
     response = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(selectedModel)}:generateContent?key=${apiKey}`, {
@@ -624,7 +690,7 @@ async function callGemini(model: string, messages: any[], userAttachments?: User
   return content;
 }
 
-// Anthropic API 호출 (비스트리밍 JSON - Netlify 호환)
+// Anthropic API 호출 (비스트리밍 JSON - Netlify 완벽 호환)
 async function callAnthropic(model: string, messages: any[], userAttachments?: UserAttachment[], retryCount: number = 0, temperature?: number, maxOutputTokens?: number): Promise<string> {
   const apiKey = apiKeyManager.getAvailableKey('anthropic');
   
@@ -708,7 +774,6 @@ async function callAnthropic(model: string, messages: any[], userAttachments?: U
         model: modelMap[model] || 'claude-3-5-sonnet-20241022',
         max_tokens: maxTokens,
         temperature: temperature ?? 1.0,
-        top_p: 0.9,
         stream: false,
         system: systemMessage?.content || 'You are a helpful AI assistant.',
         messages: transformed
@@ -1084,6 +1149,12 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const session = await verifySession(request);
+  if (!session.authenticated || !session.userId) {
+    return NextResponse.json({ error: 'ERR_AUTH', reason: '로그인이 필요합니다.' }, { status: 401 });
+  }
+
+  let chargedModelId = '';
   try {
     // Rate Limiting 체크
     const clientIp = getClientIp(request);
@@ -1130,6 +1201,11 @@ export async function POST(request: NextRequest) {
       : resolvedLanguage === 'ja'
       ? '必ず日本語で回答してください。'
       : '반드시 한국어로 답변해주세요.') + speechStyle;
+    const minimumVisibleAnswerRule = resolvedLanguage === 'en'
+      ? 'The visible answer before any hidden summary or memory block must be at least 3 separate lines.'
+      : resolvedLanguage === 'ja'
+      ? '非表示の要約やメモリブロックの前にある可視回答は、必ず3行以上で書いてください。'
+      : '숨겨진 요약이나 메모리 블록 전에 보이는 답변은 반드시 3줄 이상으로 작성해주세요.';
 
     const normalizeStoredFact = (fact: unknown) => {
       if (typeof fact !== 'string') return '';
@@ -1159,7 +1235,7 @@ export async function POST(request: NextRequest) {
       '5) Memory: concise, max 120 chars/line, same language as answer.',
     ].join('\n');
 
-    const languageInstructionWithMemory = [languageInstruction, storedFactsContext, memoryInstruction]
+    const languageInstructionWithMemory = [languageInstruction, minimumVisibleAnswerRule, storedFactsContext, memoryInstruction]
       .filter(Boolean)
       .join('\n\n');
 
@@ -1300,6 +1376,12 @@ Example style:
       }
     }
 
+    const creditConsumed = await consumeChatCredit(session.userId, modelId);
+    if (!creditConsumed) {
+      return NextResponse.json({ error: 'ERR_CREDIT_00', reason: '사용 가능한 크레딧이 없습니다.' }, { status: 402 });
+    }
+    chargedModelId = modelId;
+
     // 디버그 모드에서만 요청 추적
     if (DEBUG_LOGS) {
       console.log('[Chat API] Request:', { modelId, messages: messages.length });
@@ -1393,6 +1475,11 @@ Example style:
     return NextResponse.json({ content: responseContent });
 
   } catch (error: any) {
+    if (session.userId && chargedModelId) {
+      try {
+        await refundChatCredit(session.userId, chargedModelId);
+      } catch {}
+    }
     // 모든 환경에서 에러 로깅 (디버깅용)
     console.error('[Chat API] Error caught:', {
       message: error.message,

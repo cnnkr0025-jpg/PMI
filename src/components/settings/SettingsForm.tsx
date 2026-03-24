@@ -156,7 +156,7 @@ export function SettingsForm() {
                   : 'border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-gray-300'
               }`}
             >
-              🙏 존댓말
+              존댓말
               <p className="text-xs mt-1 font-normal">안녕하세요, 도와드릴게요!</p>
             </button>
             <button
@@ -168,7 +168,7 @@ export function SettingsForm() {
                   : 'border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-gray-300'
               }`}
             >
-              😎 반말
+              반말
               <p className="text-xs mt-1 font-normal">안녕, 도와줄게!</p>
             </button>
           </div>

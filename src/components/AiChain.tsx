@@ -158,7 +158,7 @@ export const AiChain: React.FC<Props> = ({ availableModels, walletCredits, model
     }
 
     setIsRunning(false);
-    toast.success('AI 체인이 완료되었습니다! 🎉');
+    toast.success('AI 체인이 완료되었습니다.');
   }, [prompt, steps, walletCredits, modelById, deductCredit, language, speechLevel, getStepOutputTokenLimit]);
 
   const finalResult = results.find(r => r.stepId === steps[steps.length - 1]?.id);
@@ -166,7 +166,7 @@ export const AiChain: React.FC<Props> = ({ availableModels, walletCredits, model
   return (
     <div className="p-5">
       <div className="mb-4 p-3 bg-orange-50 rounded-xl text-sm text-orange-700 border border-orange-200">
-        💡 각 AI가 이전 AI의 답변을 보고 개선합니다. 마지막 단계의 답변이 최종 결과물입니다.
+        각 AI가 이전 AI의 답변을 보고 개선합니다. 마지막 단계의 답변이 최종 결과물입니다.
       </div>
 
       {/* 체인 설정 */}
@@ -284,7 +284,7 @@ export const AiChain: React.FC<Props> = ({ availableModels, walletCredits, model
           {/* 최종 결과 강조 */}
           {finalResult?.content && !finalResult.loading && (
             <div className="mt-4 p-4 bg-orange-50 border-2 border-orange-400 rounded-xl">
-              <div className="text-sm font-bold text-orange-700 mb-2">🎯 최종 결과 (체인 완성)</div>
+              <div className="text-sm font-bold text-orange-700 mb-2">최종 결과 (체인 완성)</div>
               <div className="text-sm text-gray-800 whitespace-pre-wrap">{finalResult.content}</div>
               <button
                 onClick={() => { navigator.clipboard.writeText(finalResult.content); toast.success('복사했습니다!'); }}

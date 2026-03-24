@@ -61,6 +61,7 @@ export const Admin: React.FC = () => {
   const [newPollDescription, setNewPollDescription] = useState('');
   const [showPollForm, setShowPollForm] = useState(false);
   const router = useRouter();
+  const adminPathHeader = process.env.NEXT_PUBLIC_ADMIN_SECRET_PATH || 'admin';
 
   // Check admin authentication on component mount
   useEffect(() => {
@@ -187,7 +188,8 @@ export const Admin: React.FC = () => {
     try {
       const response = await fetch('/api/admin/users', {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('adminToken') || 'admin-token'}`
+          'Authorization': `Bearer ${localStorage.getItem('adminToken') || 'admin-token'}`,
+          'x-admin-path': adminPathHeader,
         }
       });
       
@@ -211,7 +213,8 @@ export const Admin: React.FC = () => {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('adminToken') || 'admin-token'}`
+          'Authorization': `Bearer ${localStorage.getItem('adminToken') || 'admin-token'}`,
+          'x-admin-path': adminPathHeader,
         },
         body: JSON.stringify({ userId, credits })
       });
@@ -566,11 +569,19 @@ export const Admin: React.FC = () => {
                             {item.status === 'open' ? '미처리' : '처리완료'}
                           </span>
                           {item.status === 'open' ? (
-                            <Button variant="primary" size="sm" onClick={() => setFeedbackStatus(item.id, 'resolved')}>
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              onClick={() => setFeedbackStatus(item.id, 'resolved')}
+                            >
                               처리완료
                             </Button>
                           ) : (
-                            <Button variant="outline" size="sm" onClick={() => setFeedbackStatus(item.id, 'open')}>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setFeedbackStatus(item.id, 'open')}
+                            >
                               되돌리기
                             </Button>
                           )}
@@ -922,7 +933,8 @@ export const Admin: React.FC = () => {
                             method: 'POST',
                             headers: {
                               'Content-Type': 'application/json',
-                              'Authorization': `Bearer ${localStorage.getItem('adminToken')}`
+                              'Authorization': `Bearer ${localStorage.getItem('adminToken')}`,
+                              'x-admin-path': adminPathHeader,
                             },
                             body: JSON.stringify({
                               action: 'deleteUser',

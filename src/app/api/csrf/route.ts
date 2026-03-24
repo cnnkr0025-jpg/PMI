@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       { error: 'CSRF 토큰을 찾을 수 없습니다.' },
       {
-        status: 500,
+        status: 503,
         headers: {
           'Cache-Control': 'no-store',
           Pragma: 'no-cache',

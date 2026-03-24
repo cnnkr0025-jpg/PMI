@@ -9,7 +9,7 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { access_token, code } = body;
+    const { access_token, code, code_verifier } = body;
 
     let resolvedAccessToken = access_token;
 
@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
         },
         body: JSON.stringify({
           auth_code: code,
-          code_verifier: '', // implicit 방식이므로 빈 값
+          code_verifier: typeof code_verifier === 'string' ? code_verifier : '',
         }),
       });
 

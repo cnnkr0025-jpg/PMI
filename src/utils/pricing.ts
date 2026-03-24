@@ -234,6 +234,8 @@ const modelData: Record<string, ModelData> = {
   'gpt5': { price: 10, tier: 'low' },        // 순이익 +0.92원
   'gpt51': { price: 11, tier: 'low' },       // 안정적 마진
   'gpt52': { price: 14, tier: 'low' },
+  'gpt53instant': { price: 30, tier: 'mid' },
+  'gpt54': { price: 45, tier: 'mid' },
   'gpt4o': { price: 10, tier: 'mid' },       // 순이익 +0.92원
   'gpt41': { price: 8, tier: 'low' },
   'o3': { price: 8, tier: 'low' },
@@ -241,6 +243,7 @@ const modelData: Record<string, ModelData> = {
   'o4mini': { price: 2, tier: 'low' },
   // Claude 계열 - PMI 2026 안정 가격표
   'haiku35': { price: 5, tier: 'low' },      // 원가 2.25원 → 5원
+  'sonnet35': { price: 30, tier: 'mid' },
   'haiku45': { price: 15, tier: 'mid' },     // 원가 9원 → 15원
   'sonnet45': { price: 45, tier: 'mid' },    // 원가 27원 → 45원
   'sonnet46': { price: 45, tier: 'mid' },    // 원가 27원 → 45원
@@ -263,6 +266,24 @@ const modelData: Record<string, ModelData> = {
   'gpt52codex': { price: 15, tier: 'mid' },
   // Image
   'gptimage1': { price: 40, tier: 'mid' },
+  // 48h 배치 모델
+  'gpt5_48h': { price: 5, tier: 'low' },
+  'gpt51_48h': { price: 6, tier: 'low' },
+  'gpt52_48h': { price: 7, tier: 'low' },
+  'gpt53instant_48h': { price: 15, tier: 'mid' },
+  'gpt54_48h': { price: 23, tier: 'mid' },
+  'gpt4o_48h': { price: 5, tier: 'mid' },
+  'gpt41_48h': { price: 4, tier: 'low' },
+  'o3_48h': { price: 4, tier: 'low' },
+  'o4mini_48h': { price: 1, tier: 'low' },
+  'haiku35_48h': { price: 3, tier: 'low' },
+  'sonnet35_48h': { price: 15, tier: 'mid' },
+  'haiku45_48h': { price: 8, tier: 'mid' },
+  'sonnet45_48h': { price: 23, tier: 'mid' },
+  'sonnet46_48h': { price: 23, tier: 'mid' },
+  'opus45_48h': { price: 40, tier: 'high' },
+  'opus46_48h': { price: 40, tier: 'high' },
+  'opus4_48h': { price: 100, tier: 'high' },
   // Alias 호환
   'claude_opus_41': { price: 75, tier: 'high' },
 };

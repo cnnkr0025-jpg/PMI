@@ -8,6 +8,7 @@ import crypto from 'crypto';
 
 // 세션 블랙리스트 (프로덕션에서는 Redis 사용 권장)
 const sessionBlacklist = new Set<string>();
+const SESSION_BLACKLIST_MAX = 5_000;
 
 /**
  * 안전한 문자열 비교 (타이밍 공격 방지)
@@ -189,8 +190,13 @@ export async function verifySecureToken(token: string): Promise<{
  * 세션 무효화 (로그아웃 시 사용)
  */
 export function invalidateSession(jti: string): void {
+  // 크기 한도 초과 시 가장 오래된 항목 제거 (FIFO)
+  if (sessionBlacklist.size >= SESSION_BLACKLIST_MAX) {
+    const oldest = sessionBlacklist.values().next().value;
+    if (oldest !== undefined) sessionBlacklist.delete(oldest);
+  }
   sessionBlacklist.add(jti);
-  
+
   // 24시간 후 자동 제거 (메모리 관리)
   setTimeout(() => {
     sessionBlacklist.delete(jti);

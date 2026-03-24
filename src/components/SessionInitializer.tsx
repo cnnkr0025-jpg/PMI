@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { usePathname } from 'next/navigation';
 import { useStore } from '@/store';
 import { initializeRealtimeSync, unsubscribeFromRealtimeUpdates } from '@/lib/realtimeSync';
 
@@ -11,12 +12,16 @@ import { initializeRealtimeSync, unsubscribeFromRealtimeUpdates } from '@/lib/re
 export function SessionInitializer() {
   const checkedRef = useRef(false);
   const isAuthenticated = useStore((s) => s.isAuthenticated);
+  const pathname = usePathname();
+  const isProtectedPath = Boolean(pathname && ['/chat', '/dashboard', '/settings', '/configurator', '/checkout', '/feedback'].some((route) => pathname.startsWith(route)));
 
   useEffect(() => {
     if (isAuthenticated || checkedRef.current) return;
-    checkedRef.current = true;
 
-    (async () => {
+    const run = async () => {
+      if (checkedRef.current) return;
+      checkedRef.current = true;
+
       try {
         // 세션 캐시: sessionStorage에서 5분 이내 결과 재사용 (API 재요청 제거)
         let sessionData: any = null;
@@ -250,8 +255,24 @@ export function SessionInitializer() {
       } catch {
         // 세션 확인 실패 시 무시 (비로그인 상태 유지)
       }
-    })();
-  }, [isAuthenticated]);
+    };
+
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    if (isProtectedPath) {
+      void run();
+    } else {
+      timeoutId = setTimeout(() => {
+        void run();
+      }, 900);
+    }
+
+    return () => {
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId);
+      }
+    };
+  }, [isAuthenticated, isProtectedPath]);
 
   // 컴포넌트 언마운트 시 Realtime 구독 해제
   useEffect(() => {

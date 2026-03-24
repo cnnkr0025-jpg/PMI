@@ -1,6 +1,15 @@
 import crypto from 'crypto';
+import { SignJWT, jwtVerify } from 'jose';
+import type { NextRequest } from 'next/server';
+import {
+  ADMIN_COOKIE_NAME,
+  ADMIN_MAX_AGE_SECONDS,
+  getAdminSecretPath,
+  getRequestAdminPath,
+  requestHasTrustedOrigin,
+} from './serverSecurity';
 
-const SECRET_KEY = process.env.JWT_SECRET || 'your-secret-key-change-this-in-production';
+const SECRET_KEY = process.env.ADMIN_JWT_SECRET || process.env.JWT_SECRET || '';
 
 // 비밀번호 실패 추적 (IP 기반)
 interface LoginAttempt {
@@ -10,6 +19,7 @@ interface LoginAttempt {
 }
 
 const loginAttempts = new Map<string, LoginAttempt>();
+const LOGIN_ATTEMPTS_MAX_SIZE = 50_000; // 메모리 기반 DoS 방지
 
 // 설정
 const MAX_ATTEMPTS = parseInt(process.env.ADMIN_MAX_ATTEMPTS || '5');
@@ -21,6 +31,11 @@ export function recordLoginAttempt(ip: string, success: boolean): { allowed: boo
   let attempt = loginAttempts.get(ip);
 
   if (!attempt) {
+    // Map 크기 한도 초과 시 가장 오래된 항목 제거
+    if (loginAttempts.size >= LOGIN_ATTEMPTS_MAX_SIZE) {
+      const firstKey = loginAttempts.keys().next().value;
+      if (firstKey !== undefined) loginAttempts.delete(firstKey);
+    }
     attempt = { count: 0, lockedUntil: null, lastAttempt: now };
     loginAttempts.set(ip, attempt);
   }
@@ -88,68 +103,112 @@ export function isIPLocked(ip: string): { locked: boolean; lockedUntil?: number 
 // 관리자 비밀번호 검증
 export function verifyAdminPassword(password: string): boolean {
   const adminPassword = process.env.ADMIN_PASSWORD;
-  
-  if (!adminPassword) {
-    console.error('⚠️ ADMIN_PASSWORD가 설정되지 않았습니다!');
+
+  if (!adminPassword || !SECRET_KEY || SECRET_KEY.length < 32) {
     return false;
   }
 
-  return password === adminPassword;
+  const passwordBuffer = Buffer.from(password);
+  const adminBuffer = Buffer.from(adminPassword);
+
+  if (passwordBuffer.length !== adminBuffer.length) {
+    const dummy = Buffer.alloc(Math.max(passwordBuffer.length, adminBuffer.length) || 1);
+    crypto.timingSafeEqual(dummy, dummy);
+    return false;
+  }
+
+  return crypto.timingSafeEqual(passwordBuffer, adminBuffer);
 }
 
-// 간단한 토큰 생성 (role + timestamp + signature)
-export function generateAdminToken(): string {
-  const payload = {
-    role: 'admin',
-    iat: Date.now(),
-    exp: Date.now() + 24 * 60 * 60 * 1000 // 24시간
-  };
-  
-  const payloadStr = JSON.stringify(payload);
-  const payloadBase64 = Buffer.from(payloadStr).toString('base64');
-  
-  // HMAC 서명 생성
-  const signature = crypto
-    .createHmac('sha256', SECRET_KEY)
-    .update(payloadBase64)
-    .digest('base64');
-  
-  return `${payloadBase64}.${signature}`;
+function getAdminKey(): Uint8Array {
+  if (!SECRET_KEY || SECRET_KEY.length < 32) {
+    throw new Error('ADMIN_JWT_SECRET 또는 JWT_SECRET이 안전하게 설정되지 않았습니다.');
+  }
+
+  return new TextEncoder().encode(SECRET_KEY);
 }
 
-// 토큰 검증
-export function verifyAdminToken(token: string): boolean {
+function createAdminFingerprint(userAgent: string, adminPath: string): string {
+  return crypto
+    .createHash('sha256')
+    .update(`${userAgent}|${adminPath}`)
+    .digest('hex');
+}
+
+export async function generateAdminToken(userAgent: string, adminPath: string): Promise<string> {
+  const fingerprint = createAdminFingerprint(userAgent, adminPath);
+
+  return new SignJWT({ role: 'admin', fingerprint })
+    .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
+    .setIssuedAt()
+    .setIssuer('pick-my-ai-admin')
+    .setAudience('pick-my-ai-admin')
+    .setJti(crypto.randomUUID())
+    .setExpirationTime(`${ADMIN_MAX_AGE_SECONDS}s`)
+    .sign(getAdminKey());
+}
+
+export async function verifyAdminToken(token: string, userAgent: string, adminPath: string): Promise<boolean> {
   try {
-    const [payloadBase64, signature] = token.split('.');
-    
-    // 서명 검증
-    const expectedSignature = crypto
-      .createHmac('sha256', SECRET_KEY)
-      .update(payloadBase64)
-      .digest('base64');
-    
-    if (signature !== expectedSignature) {
+    if (!token || !userAgent || !adminPath) {
       return false;
     }
-    
-    // 페이로드 파싱 및 만료 시간 확인
-    const payload = JSON.parse(Buffer.from(payloadBase64, 'base64').toString());
-    
-    if (payload.exp < Date.now()) {
-      return false; // 토큰 만료
+
+    const { payload } = await jwtVerify(token, getAdminKey(), {
+      algorithms: ['HS256'],
+      issuer: 'pick-my-ai-admin',
+      audience: 'pick-my-ai-admin',
+    });
+
+    const expectedFingerprint = createAdminFingerprint(userAgent, adminPath);
+    const actualFingerprint = typeof payload.fingerprint === 'string' ? payload.fingerprint : '';
+
+    if (!actualFingerprint || actualFingerprint.length !== expectedFingerprint.length) {
+      return false;
     }
-    
-    return payload.role === 'admin';
+
+    return payload.role === 'admin' && crypto.timingSafeEqual(Buffer.from(actualFingerprint), Buffer.from(expectedFingerprint));
   } catch (error) {
     return false;
   }
+}
+
+export async function isAuthorizedAdminRequest(request: NextRequest): Promise<boolean> {
+  const authHeader = request.headers.get('authorization') || request.headers.get('Authorization') || '';
+  if (!authHeader.startsWith('Bearer ')) {
+    return false;
+  }
+
+  const bearerToken = authHeader.slice(7).trim();
+  const cookieToken = request.cookies.get(ADMIN_COOKIE_NAME)?.value || '';
+  const requestAdminPath = getRequestAdminPath(request);
+  const secretPath = getAdminSecretPath();
+  const userAgent = request.headers.get('user-agent') || 'unknown';
+
+  if (!bearerToken || !cookieToken || !secretPath || requestAdminPath !== secretPath) {
+    return false;
+  }
+
+  if (!requestHasTrustedOrigin(request)) {
+    return false;
+  }
+
+  if (bearerToken.length !== cookieToken.length) {
+    return false;
+  }
+
+  if (!crypto.timingSafeEqual(Buffer.from(bearerToken), Buffer.from(cookieToken))) {
+    return false;
+  }
+
+  return verifyAdminToken(bearerToken, userAgent, requestAdminPath);
 }
 
 // 정리 작업 (1시간마다 오래된 데이터 삭제)
 setInterval(() => {
   const now = Date.now();
   const ONE_HOUR = 60 * 60 * 1000;
-  
+
   Array.from(loginAttempts.entries()).forEach(([ip, attempt]) => {
     if (now - attempt.lastAttempt > ONE_HOUR && (!attempt.lockedUntil || now > attempt.lockedUntil)) {
       loginAttempts.delete(ip);

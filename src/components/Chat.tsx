@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic';
 import { useStore } from '@/store';
 import { shallow } from 'zustand/shallow';
 import { Button } from '@/components/ui/Button';
-import { Plus, Settings, LayoutDashboard, Trash2, X, Download, Pencil, Check, Bot, Paperclip, ChevronRight, AlertCircle, MessageSquare, GitCompare, UserCircle, Copy, Square, Star, Volume2, RefreshCw, Search, FileText, Link2, Swords } from 'lucide-react';
+import { Plus, Settings, LayoutDashboard, Trash2, X, Download, Pencil, Check, Bot, Paperclip, ChevronRight, AlertCircle, MessageSquare, GitCompare, UserCircle, Copy, Square, Star, Volume2, RefreshCw, Search, FileText, Link2, Swords, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/utils/cn';
 import { useRouter } from 'next/navigation';
@@ -22,6 +22,13 @@ const STREAMING_DRAFT_V2 = process.env.NEXT_PUBLIC_STREAMING_DRAFT_V2 === 'true'
 const STREAMING_DRAFT_UI_THROTTLE_MS = 0;
 const REQUEST_BODY_SIZE_LIMIT_BYTES = 4 * 1024 * 1024;
 const TEXT_SIZE_ENCODER = new TextEncoder();
+const COMPOSER_DRAFT_STORAGE_PREFIX = 'pickmyai:chat-draft';
+const COMPOSER_DRAFT_TTL_MS = 10 * 60 * 1000;
+
+type PersistedComposerDraft = {
+  message: string;
+  updatedAt: number;
+};
 
 // 메모이제이션된 서브 컴포넌트들
 const MessageItem = React.memo(({ message, formatMessage }: any) => (
@@ -437,6 +444,8 @@ export const Chat: React.FC = () => {
   const [showBookmarks, setShowBookmarks] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
+  const [showSmartRouterPanel, setShowSmartRouterPanel] = useState(false);
+  const [smartRouterAutoAnalyzeToken, setSmartRouterAutoAnalyzeToken] = useState(0);
   const ttsRef = useRef<SpeechSynthesisUtterance | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -456,6 +465,7 @@ export const Chat: React.FC = () => {
   const autoScrollToastIdRef = useRef<string | number | null>(null);
   const isMountedRef = useRef(true);
   const batchPendingRefundRef = useRef<{ messageId: string; modelId: string; piWon: number; refundToken: string } | null>(null);
+  const composerDraftHydratedKeyRef = useRef<string | null>(null);
   
   const {
     chatSessions,
@@ -542,6 +552,63 @@ export const Chat: React.FC = () => {
     return m?.piWon ?? 1;
   }, [models, selectedModelId]);
 
+  const getComposerDraftStorageKey = useCallback((sessionId: string | null | undefined) => {
+    const userKey = currentUser?.id ?? 'guest';
+    const sessionKey = sessionId ?? 'new';
+    return `${COMPOSER_DRAFT_STORAGE_PREFIX}:${userKey}:${sessionKey}`;
+  }, [currentUser?.id]);
+
+  const composerDraftStorageKey = useMemo(
+    () => getComposerDraftStorageKey(currentSessionId),
+    [currentSessionId, getComposerDraftStorageKey]
+  );
+
+  const removeComposerDraft = useCallback((storageKey: string) => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.removeItem(storageKey);
+  }, []);
+
+  const persistComposerDraft = useCallback((storageKey: string, value: string) => {
+    if (typeof window === 'undefined') return;
+
+    if (!value.trim()) {
+      window.localStorage.removeItem(storageKey);
+      return;
+    }
+
+    const payload: PersistedComposerDraft = {
+      message: value,
+      updatedAt: Date.now(),
+    };
+
+    window.localStorage.setItem(storageKey, JSON.stringify(payload));
+  }, []);
+
+  const readComposerDraft = useCallback((storageKey: string) => {
+    if (typeof window === 'undefined') return '';
+
+    const raw = window.localStorage.getItem(storageKey);
+    if (!raw) return '';
+
+    try {
+      const parsed = JSON.parse(raw) as PersistedComposerDraft;
+      if (typeof parsed?.message !== 'string' || typeof parsed?.updatedAt !== 'number') {
+        window.localStorage.removeItem(storageKey);
+        return '';
+      }
+
+      if (Date.now() - parsed.updatedAt > COMPOSER_DRAFT_TTL_MS) {
+        window.localStorage.removeItem(storageKey);
+        return '';
+      }
+
+      return parsed.message;
+    } catch {
+      window.localStorage.removeItem(storageKey);
+      return '';
+    }
+  }, []);
+
   const { t } = useTranslation();
 
   const chatPerfEnabled = useMemo(() => isChatPerfEnabled(), []);
@@ -549,6 +616,17 @@ export const Chat: React.FC = () => {
   useEffect(() => {
     initChatPerfOnce();
   }, []);
+
+  useEffect(() => {
+    const restoredDraft = readComposerDraft(composerDraftStorageKey);
+    composerDraftHydratedKeyRef.current = composerDraftStorageKey;
+    setMessage(restoredDraft);
+  }, [composerDraftStorageKey, readComposerDraft]);
+
+  useEffect(() => {
+    if (composerDraftHydratedKeyRef.current !== composerDraftStorageKey) return;
+    persistComposerDraft(composerDraftStorageKey, message);
+  }, [composerDraftStorageKey, message, persistComposerDraft]);
 
   // 컴포넌트 마운트 시 상태 초기화
   useEffect(() => {
@@ -686,6 +764,11 @@ export const Chat: React.FC = () => {
 
   const currentMessages = useMemo<ChatMessage[]>(() => currentSession?.messages || [], [currentSession]);
 
+  // Clear per-session summaries when switching sessions to free memory
+  useEffect(() => {
+    setConversationSummaries([]);
+  }, [currentSessionId]);
+
   const modelById = useMemo(() => {
     const map = new Map<string, any>();
     for (const m of models) {
@@ -804,9 +887,13 @@ export const Chat: React.FC = () => {
 
   // 세션 전환 시 로딩 상태 초기화
   useEffect(() => {
+    if (sendInFlightRef.current || abortControllerRef.current || streamingRef.current) {
+      return;
+    }
     setIsLoading(false);
     streamingRef.current = false;
     clearDraftMessage();
+    setShowSmartRouterPanel(false);
   }, [currentSessionId, clearDraftMessage]);
   
   // Set default model when available models change (client-side only)
@@ -1043,7 +1130,7 @@ export const Chat: React.FC = () => {
         timestamp: typeof msg.timestamp === 'string' ? msg.timestamp : new Date(msg.timestamp).toISOString(),
         sessionTitle: session?.title,
       });
-      toast.success('북마크에 저장했습니다! ⭐');
+      toast.success('북마크에 저장했습니다.');
     }
   }, [currentSessionId, bookmarkedMessageIds, addBookmark, removeBookmark]);
 
@@ -1056,19 +1143,38 @@ export const Chat: React.FC = () => {
     }
     const stripped = stripSummaryBlock(content).replace(/[#*`]/g, '').trim();
     const utter = new SpeechSynthesisUtterance(stripped);
-    utter.lang = language === 'en' ? 'en-US' : language === 'ja' ? 'ja-JP' : 'ko-KR';
-    utter.rate = 1.1;
-    utter.pitch = 1.0;
+    const utterLang = language === 'en' ? 'en-US' : language === 'ja' ? 'ja-JP' : 'ko-KR';
+    utter.lang = utterLang;
+    utter.rate = language === 'ko' ? 1.0 : 1.02;
+    utter.pitch = 1.02;
     utter.volume = 1.0;
     
-    // 더 좋은 음성 선택 (사용 가능한 경우)
     const voices = window.speechSynthesis.getVoices();
     if (voices.length > 0) {
-      const preferredVoice = voices.find(v => 
-        (language === 'ko' && (v.name.includes('Google') || v.name.includes('Yuna') || v.name.includes('Sora'))) ||
-        (language === 'en' && (v.name.includes('Google') || v.name.includes('Samantha') || v.name.includes('Karen'))) ||
-        (language === 'ja' && (v.name.includes('Google') || v.name.includes('Kyoko')))
-      );
+      const preferredNames = language === 'ko'
+        ? ['sunhi', 'yuna', 'sora', 'heami', 'seoyeon', 'google']
+        : language === 'ja'
+          ? ['kyoko', 'otoya', 'google', 'microsoft']
+          : ['samantha', 'aria', 'jenny', 'guy', 'google', 'microsoft'];
+      const preferredVoice = [...voices]
+        .filter(v => v.lang.toLowerCase().startsWith(utterLang.slice(0, 2).toLowerCase()))
+        .sort((a, b) => {
+          const scoreVoice = (voice: SpeechSynthesisVoice) => {
+            const lowerName = voice.name.toLowerCase();
+            let score = 0;
+            if (!voice.localService) score += 20;
+            if (lowerName.includes('natural')) score += 15;
+            if (lowerName.includes('premium')) score += 10;
+            if (lowerName.includes('enhanced')) score += 10;
+            preferredNames.forEach((keyword, index) => {
+              if (lowerName.includes(keyword)) {
+                score += 100 - index;
+              }
+            });
+            return score;
+          };
+          return scoreVoice(b) - scoreVoice(a);
+        })[0];
       if (preferredVoice) utter.voice = preferredVoice;
     }
     
@@ -1223,6 +1329,7 @@ export const Chat: React.FC = () => {
     
     sendInFlightRef.current = true;
     setIsLoading(true);
+    streamingRef.current = true;
     setIsCancelled(false);
     
     // 현재 선택된 모델 ID를 고정 (출력 중 모델 선택이 바뀌어도 메시지의 모델은 유지)
@@ -1237,7 +1344,7 @@ export const Chat: React.FC = () => {
 
     if (!sessionIdForThisRequest) {
       const sessionError = new Error('ERR_SESSION_00') as Error & { detail?: string };
-      sessionError.detail = '대화 세션을 만들지 못했어요. 잠시 후 다시 시도해주세요.';
+      sessionError.detail = '대화를 만들지 못했어요. 잠시 후 다시 시도해주세요.';
       throw sessionError;
     }
 
@@ -1246,6 +1353,8 @@ export const Chat: React.FC = () => {
 
     try {
       const msg = trimmedMessage;
+      const composerDraftStorageKeyForRequest = composerDraftStorageKey;
+      removeComposerDraft(composerDraftStorageKeyForRequest);
       setMessage('');
       
       // API 호출을 위한 메시지 준비 (크레딧 차감 전에 먼저 준비)
@@ -1345,7 +1454,7 @@ export const Chat: React.FC = () => {
                 refundToken: capturedRefundToken,
               };
             }
-            finalizeMessageContent(sessionIdForThisRequest, assistantMessageId, '⏳ 답변을 준비 중입니다. 최대 24시간 내에 답변이 도착합니다.');
+            finalizeMessageContent(sessionIdForThisRequest, assistantMessageId, '⏳ 답변을 준비 중입니다. 최대 48시간 내에 답변이 도착합니다.');
             setBatchPendingMessageId(assistantMessageId);
           } else {
             const { errorReason } = await readApiErrorResponse(batchRes);
@@ -1354,6 +1463,7 @@ export const Chat: React.FC = () => {
               capturedRefundToken = false;
             }
             finalizeMessageContent(sessionIdForThisRequest, assistantMessageId, errorReason || '요청 전송에 실패했습니다. 다시 시도해 주세요.');
+            setBatchPendingMessageId(null);
           }
         } catch {
           if (capturedRefundToken) {
@@ -1756,7 +1866,10 @@ export const Chat: React.FC = () => {
         if (code.startsWith('ERR_CONFIG')) {
           return { icon: '🛠️', title: '모델 설정 오류', message: '현재 이 AI 모델 설정에 문제가 있어 요청을 처리할 수 없어요.', tips: ['잠시 후 다시 시도해주세요', '문제가 계속되면 관리자에게 문의해주세요'] };
         }
-        if (code.startsWith('ERR_KEY') || code === 'ERR_AUTH') {
+        if (code === 'ERR_AUTH') {
+          return { icon: '🔐', title: '로그인이 필요해요', message: '로그인한 사용자만 AI 기능을 사용할 수 있어요.', tips: ['로그인 후 다시 시도해주세요', '로그인 상태가 풀렸다면 다시 로그인해주세요'] };
+        }
+        if (code.startsWith('ERR_KEY')) {
           return { icon: '🔧', title: '서비스 점검 중', message: '현재 이 AI 모델의 서비스를 일시적으로 이용할 수 없어요.', tips: ['다른 AI 모델을 선택해보세요', '잠시 후 다시 시도해주세요'] };
         }
         if (code.startsWith('ERR_NET')) {
@@ -1814,7 +1927,7 @@ export const Chat: React.FC = () => {
         });
       }
     }
-  }, [message, selectedModelId, selectedModel, selectedModelMaxCharacters, walletCredits, currentSessionId, deductCredit, refundCredit, releasePendingRefundToken, addMessage, addCredits, attachments, temperature, language, activePersona, storedFacts, updateMessageContent, finalizeMessageContent, scrollToBottom, isCancelled, conversationSummaries, isBatchModel, isVideoModel, videoSeconds, startDraftMessage, flushDraftMessage, clearDraftMessage, createChatSession, isLoading, modelById, addStoredFacts]);
+  }, [message, selectedModelId, selectedModel, selectedModelMaxCharacters, walletCredits, currentSessionId, deductCredit, refundCredit, releasePendingRefundToken, addMessage, addCredits, attachments, temperature, language, activePersona, storedFacts, updateMessageContent, finalizeMessageContent, scrollToBottom, isCancelled, conversationSummaries, isBatchModel, isVideoModel, videoSeconds, startDraftMessage, flushDraftMessage, clearDraftMessage, createChatSession, isLoading, modelById, addStoredFacts, composerDraftStorageKey, removeComposerDraft]);
   
   const handleNewChat = useCallback(() => {
     if (isOnCooldown) return;
@@ -1833,13 +1946,17 @@ export const Chat: React.FC = () => {
     const sessionId = createChatSession('새 대화 ' + (chatSessions.length + 1));
     
     if (sessionId) {
+      if (currentSessionId) {
+        removeComposerDraft(getComposerDraftStorageKey(currentSessionId));
+      }
+      persistComposerDraft(getComposerDraftStorageKey(sessionId), pendingMessage);
       setCurrentSession(sessionId);
       // 기존 입력 내용을 새 채팅으로 이전
       setMessage(pendingMessage);
       setAttachments(pendingAttachments);
     }
-  }, [isOnCooldown, chatSessions.length, createChatSession, setCurrentSession, message, attachments]);
-  
+  }, [isOnCooldown, chatSessions.length, createChatSession, setCurrentSession, message, attachments, currentSessionId, getComposerDraftStorageKey, persistComposerDraft, removeComposerDraft]);
+
   const handleKeyPress = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -2443,7 +2560,7 @@ export const Chat: React.FC = () => {
               </select>
             </div>
             {/* 스마트 라우터 */}
-            {message.trim().length > 0 && availableModels.length > 0 && (
+            {showSmartRouterPanel && message.trim().length > 0 && availableModels.length > 0 && (
               <div className="mb-3">
                 <SmartRouterContent
                   question={message}
@@ -2451,6 +2568,7 @@ export const Chat: React.FC = () => {
                   speechLevel={speechLevel}
                   language={language}
                   compact
+                  autoAnalyzeToken={smartRouterAutoAnalyzeToken}
                 />
               </div>
             )}
@@ -2502,7 +2620,7 @@ export const Chat: React.FC = () => {
             {batchPendingMessageId && (
               <div className="mb-2 px-4 py-3 bg-blue-50 border border-blue-200 rounded-xl text-sm text-blue-800 flex items-center gap-2">
                 <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin shrink-0" />
-                <span>답변 준비 중입니다. 최대 24시간 내에 답변이 도착하면 자동으로 표시됩니다.</span>
+                <span>답변 준비 중입니다. 최대 48시간 내에 답변이 도착하면 자동으로 표시됩니다.</span>
               </div>
             )}
 
@@ -2590,6 +2708,28 @@ export const Chat: React.FC = () => {
                             <div>
                               <div className="text-sm font-semibold text-gray-900">AI 토론</div>
                               <div className="text-xs text-gray-500">두 AI가 주제로 끝장 토론</div>
+                            </div>
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              if (!message.trim()) {
+                                toast.info('질문을 먼저 입력해주세요.');
+                                setShowPlusMenu(false);
+                                return;
+                              }
+                              setShowSmartRouterPanel(true);
+                              setSmartRouterAutoAnalyzeToken((prev) => prev + 1);
+                              setShowPlusMenu(false);
+                            }}
+                            className="w-full flex items-center space-x-3 px-4 py-3 hover:bg-gray-50 rounded-lg transition-colors text-left"
+                          >
+                            <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center">
+                              <Sparkles className="w-5 h-5 text-indigo-700" />
+                            </div>
+                            <div>
+                              <div className="text-sm font-semibold text-gray-900">질문 분석하기</div>
+                              <div className="text-xs text-gray-500">입력한 질문에 맞는 AI 추천</div>
                             </div>
                           </button>
 
@@ -2886,7 +3026,7 @@ export const Chat: React.FC = () => {
                 <div className="text-center py-12 text-gray-500">
                   <Star className="w-12 h-12 mx-auto mb-3 text-gray-300" />
                   <p>저장된 답변이 없습니다.</p>
-                  <p className="text-sm mt-1">AI 답변 아래 ⭐ 버튼을 클릭하면 여기에 저장됩니다.</p>
+                  <p className="text-sm mt-1">AI 답변 아래 북마크 버튼을 클릭하면 여기에 저장됩니다.</p>
                 </div>
               ) : bookmarkedMessages.map(bm => (
                 <div key={bm.id} className="bg-gray-50 dark:bg-gray-700 rounded-xl p-4 group">
@@ -2963,7 +3103,7 @@ const ChatTemplatesContent = dynamic(() => import('@/components/ChatTemplates').
 const ModelComparisonContent = dynamic(() => import('@/components/SideBySide').then((mod: any) => ({ default: mod.SideBySide })), { ssr: false }) as React.ComponentType<AiFeatureProps>;
 const PersonaSettingsContent = dynamic(() => import('@/components/PersonaSettings').then(mod => ({ default: mod.PersonaSettings })), { ssr: false });
 type AiFeatureProps = { availableModels: any[]; walletCredits: { [modelId: string]: number }; modelById: Map<string, any>; onClose?: () => void; language?: string; speechLevel?: string; };
-type SmartRouterProps = { question: string; models: any[]; speechLevel?: string; language?: string; compact?: boolean; };
+type SmartRouterProps = { question: string; models: any[]; speechLevel?: string; language?: string; compact?: boolean; autoAnalyzeToken?: number; };
 // @ts-ignore – AiChain is a dynamic component without static type declarations
 const AiChainContent = dynamic(() => import('@/components/AiChain').then((mod: any) => ({ default: mod.AiChain })), { ssr: false }) as React.ComponentType<AiFeatureProps>;
 // @ts-ignore – AiDebate is a dynamic component without static type declarations

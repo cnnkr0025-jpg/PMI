@@ -1,11 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateAdminToken, verifyAdminPassword, recordLoginAttempt, isIPLocked } from '@/lib/adminAuth';
-import { getClientIp } from '@/lib/rateLimit';
+import {
+  ADMIN_COOKIE_NAME,
+  ADMIN_MAX_AGE_SECONDS,
+  enforceTrustedOrigin,
+  getAdminSecretPath,
+  getClientIpFromRequest,
+  getCookieSecurityOptions,
+  getRequestAdminPath,
+  setNoStoreHeaders,
+} from '@/lib/serverSecurity';
 
 export async function POST(request: NextRequest) {
   try {
-    const { password } = await request.json();
-    const clientIp = getClientIp(request);
+    const originError = enforceTrustedOrigin(request);
+    if (originError) {
+      return originError;
+    }
+
+    const secretPath = getAdminSecretPath();
+    const requestAdminPath = getRequestAdminPath(request);
+    if (!secretPath || requestAdminPath !== secretPath) {
+      return NextResponse.json({ error: '찾을 수 없습니다.' }, { status: 404 });
+    }
+
+    const body = await request.json().catch(() => null);
+    const password = typeof body?.password === 'string' ? body.password : '';
+    const clientIp = getClientIpFromRequest(request);
 
     if (!password) {
       return NextResponse.json({ error: '비밀번호를 입력해주세요.' }, { status: 400 });
@@ -15,10 +36,9 @@ export async function POST(request: NextRequest) {
     const lockStatus = isIPLocked(clientIp);
     if (lockStatus.locked) {
       const remainingTime = Math.ceil((lockStatus.lockedUntil! - Date.now()) / 1000 / 60);
-      return NextResponse.json({ 
-        error: `너무 많은 로그인 시도로 인해 계정이 잠겼습니다. ${remainingTime}분 후에 다시 시도해주세요.`,
+      return NextResponse.json({
+        error: `너무 많은 로그인 시도로 인해 잠시 후 다시 시도해주세요. (약 ${remainingTime}분 후)`,
         locked: true,
-        lockedUntil: lockStatus.lockedUntil
       }, { status: 429 });
     }
 
@@ -31,27 +51,30 @@ export async function POST(request: NextRequest) {
     if (!isValid) {
       if (!attemptResult.allowed) {
         const remainingTime = Math.ceil((attemptResult.lockedUntil! - Date.now()) / 1000 / 60);
-        return NextResponse.json({ 
-          error: `비밀번호가 올바르지 않습니다. 너무 많은 시도로 인해 계정이 잠겼습니다. ${remainingTime}분 후에 다시 시도해주세요.`,
+        return NextResponse.json({
+          error: `잠시 후 다시 시도해주세요. (약 ${remainingTime}분 후)`,
           locked: true,
-          lockedUntil: attemptResult.lockedUntil
         }, { status: 429 });
       }
 
-      return NextResponse.json({ 
-        error: `비밀번호가 올바르지 않습니다. (남은 시도: ${attemptResult.remainingAttempts}회)`,
-        remainingAttempts: attemptResult.remainingAttempts
+      return NextResponse.json({
+        error: '비밀번호가 올바르지 않습니다.',
       }, { status: 401 });
     }
 
-    // 토큰 생성 (24시간 유효)
-    const token = generateAdminToken();
+    // 토큰 생성 및 쿠키 설정
+    const userAgent = request.headers.get('user-agent') || 'unknown';
+    const token = await generateAdminToken(userAgent, requestAdminPath);
 
-    return NextResponse.json({ 
+    const response = setNoStoreHeaders(NextResponse.json({ 
       success: true, 
       token,
-      expiresIn: 24 * 60 * 60 * 1000 // 24시간 (밀리초)
-    });
+      expiresIn: ADMIN_MAX_AGE_SECONDS * 1000
+    }));
+
+    response.cookies.set(ADMIN_COOKIE_NAME, token, getCookieSecurityOptions(ADMIN_MAX_AGE_SECONDS, 'strict'));
+
+    return response;
   } catch (error: any) {
     console.error('Admin login error:', error);
     return NextResponse.json({ error: '로그인 처리 중 오류가 발생했습니다.' }, { status: 500 });

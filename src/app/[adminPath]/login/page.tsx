@@ -21,7 +21,7 @@ export default function SecretAdminLoginPage() {
   const adminPath = params.adminPath as string;
 
   useEffect(() => {
-    if (!secretPath || adminPath !== secretPath) {
+    if (secretPath && adminPath !== secretPath) {
       router.replace('/404');
     }
   }, [adminPath, secretPath, router]);
@@ -68,6 +68,7 @@ export default function SecretAdminLoginPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'x-admin-path': adminPath,
         },
         body: JSON.stringify({ password }),
       });
@@ -101,7 +102,7 @@ export default function SecretAdminLoginPage() {
     }
   };
 
-  if (!secretPath || adminPath !== secretPath) {
+  if (secretPath && adminPath !== secretPath) {
     return null;
   }
 

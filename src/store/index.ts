@@ -42,6 +42,12 @@ import { recordChatPerfLsSetItem } from '@/utils/chatPerf';
 type AppLanguage = 'ko' | 'en' | 'ja';
 
 const MAX_STORED_FACTS = 50;
+const MAX_PMC_HISTORY = 200;
+const MAX_NOTIFICATIONS = 100;
+const MAX_COMPARISON_SESSIONS = 50;
+const MAX_WALLET_TRANSACTIONS = 500;
+const MAX_SENT_GIFTS = 200;
+const MAX_ALL_GIFTS = 500;
 const PERSIST_WRITE_DEBOUNCE_MS = 150;
 const persistedValueCache = new Map<string, string>();
 const pendingPersistWrites = new Map<string, string>();
@@ -721,7 +727,7 @@ export const useStore = create<AppState>()(
         const updatedWallet = {
           ...state.wallet,
           credits: newCredits,
-          transactions: [...state.wallet.transactions, transaction]
+          transactions: [...state.wallet.transactions, transaction].slice(-MAX_WALLET_TRANSACTIONS)
         };
         
         set({
@@ -782,7 +788,7 @@ export const useStore = create<AppState>()(
             wallet: {
               ...state.wallet,
               credits: newCredits,
-              transactions: [...state.wallet.transactions, transaction]
+              transactions: [...state.wallet.transactions, transaction].slice(-MAX_WALLET_TRANSACTIONS)
             },
             _pendingRefundTokens: newTokens,
           };
@@ -1133,7 +1139,7 @@ export const useStore = create<AppState>()(
           createdAt: new Date(),
         };
         set((state) => ({
-          comparisonSessions: [...state.comparisonSessions, session],
+          comparisonSessions: [...state.comparisonSessions, session].slice(-MAX_COMPARISON_SESSIONS),
           activeComparison: session,
         }));
         return session.id;
@@ -1264,12 +1270,12 @@ export const useStore = create<AppState>()(
         };
         
         set((state) => ({
-          sentGifts: [...state.sentGifts, gift],
-          allGifts: [...state.allGifts, gift], // 글로벌 선물 목록에 추가
+          sentGifts: [...state.sentGifts, gift].slice(-MAX_SENT_GIFTS),
+          allGifts: [...state.allGifts, gift].slice(-MAX_ALL_GIFTS), // 글로벌 선물 목록에 추가
           wallet: state.wallet ? {
             ...state.wallet,
             credits: newCredits,
-            transactions: [...state.wallet.transactions, transaction],
+            transactions: [...state.wallet.transactions, transaction].slice(-MAX_WALLET_TRANSACTIONS),
           } : state.wallet,
         }));
         return true;
@@ -1333,7 +1339,7 @@ export const useStore = create<AppState>()(
               timestamp: new Date(),
             };
             set((state) => ({
-              notifications: [...state.notifications, notification],
+              notifications: [...state.notifications, notification].slice(-MAX_NOTIFICATIONS),
             }));
           }
         });
@@ -1517,11 +1523,11 @@ export const useStore = create<AppState>()(
         set((state) => ({
           pmcBalance: {
             amount: state.pmcBalance.amount + amount,
-            history: [transaction, ...state.pmcBalance.history],
+            history: [transaction, ...state.pmcBalance.history].slice(0, MAX_PMC_HISTORY),
           },
         }));
       },
-      
+
       usePMC: (amount: number, description: string, orderId?: string) => {
         const state = get();
         const available = state.getAvailablePMC();
@@ -1541,7 +1547,7 @@ export const useStore = create<AppState>()(
         set((state) => ({
           pmcBalance: {
             amount: state.pmcBalance.amount - amount,
-            history: [transaction, ...state.pmcBalance.history],
+            history: [transaction, ...state.pmcBalance.history].slice(0, MAX_PMC_HISTORY),
           },
         }));
         
@@ -1740,7 +1746,7 @@ export const useStore = create<AppState>()(
           wallet: state.wallet ? {
             ...state.wallet,
             credits: newCredits,
-            transactions: [...state.wallet.transactions, transaction],
+            transactions: [...state.wallet.transactions, transaction].slice(-MAX_WALLET_TRANSACTIONS),
           } : state.wallet,
         }));
         

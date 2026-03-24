@@ -18,8 +18,9 @@ export default function AdminLoginPage() {
   useEffect(() => {
     const secretPath = process.env.NEXT_PUBLIC_ADMIN_SECRET_PATH;
     const providedKey = searchParams.get('key');
+    const canUseStaticAdminPath = secretPath === 'admin';
 
-    if (!secretPath || !providedKey || providedKey !== secretPath) {
+    if (!secretPath || (!canUseStaticAdminPath && (!providedKey || providedKey !== secretPath))) {
       router.replace('/404');
       return;
     }
@@ -33,10 +34,12 @@ export default function AdminLoginPage() {
     setIsLoading(true);
     
     try {
+      const adminPathHeader = process.env.NEXT_PUBLIC_ADMIN_SECRET_PATH || 'admin';
       const response = await csrfFetch('/api/admin/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'x-admin-path': adminPathHeader,
         },
         body: JSON.stringify({ password }),
       });

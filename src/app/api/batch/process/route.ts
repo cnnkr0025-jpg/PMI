@@ -21,23 +21,25 @@ const ANTHROPIC_BATCH_IDS = new Set([
 
 const ANTHROPIC_MODEL_MAP: Record<string, string> = {
   'haiku35_48h': 'claude-3-5-haiku-20241022',
-  'haiku45_48h': 'claude-3-5-haiku-20241022',
-  'sonnet45_48h': 'claude-3-5-sonnet-20241022',
-  'sonnet46_48h': 'claude-3-5-sonnet-20241022',
+  'haiku45_48h': 'claude-haiku-4-5',
+  'sonnet45_48h': 'claude-sonnet-4-5',
+  'sonnet46_48h': 'claude-sonnet-4-6',
   'opus4_48h': 'claude-opus-4-20250514',
   'opus41_48h': 'claude-opus-4-20250514',
-  'opus45_48h': 'claude-opus-4-20250514',
-  'opus46_48h': 'claude-opus-4-20250514',
+  'opus45_48h': 'claude-opus-4-5',
+  'opus46_48h': 'claude-opus-4-6',
 };
 
 const OPENAI_MODEL_MAP: Record<string, string> = {
-  'gpt5_48h': 'gpt-4o',
-  'gpt51_48h': 'gpt-4o',
-  'gpt52_48h': 'gpt-4o',
+  'gpt5_48h': 'gpt-5',
+  'gpt51_48h': 'gpt-5.1',
+  'gpt52_48h': 'gpt-5.2',
+  'gpt53instant_48h': 'gpt-5.3-chat-latest',
+  'gpt54_48h': 'gpt-5.4',
   'gpt4o_48h': 'gpt-4o',
-  'gpt41_48h': 'gpt-4o',
-  'o3_48h': 'o3-mini',
-  'o4mini_48h': 'gpt-4o-mini',
+  'gpt41_48h': 'gpt-4.1',
+  'o3_48h': 'o3',
+  'o4mini_48h': 'o4-mini',
 };
 
 // POST /api/batch/process  (cron 또는 관리자 호출)

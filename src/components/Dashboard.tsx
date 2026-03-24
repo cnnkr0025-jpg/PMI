@@ -116,17 +116,51 @@ export const Dashboard: React.FC = () => {
     return 'bg-green-500';
   }, []);
 
+  const getSwapPMCPerCredit = useCallback((modelId: string) => {
+    const model = models.find(m => m.id === modelId);
+    if (!model) return 0;
+    const pricePerCredit = getFixedDisplayPriceOrFallback(model.id, model.piWon).price;
+    return Math.max(pricePerCredit - 1, 0);
+  }, [models]);
+
   const swapModels = useMemo(() => {
     if (!wallet) return [];
-    return models.filter(m => m.enabled && (wallet.credits[m.id] || 0) > 0 && m.series !== 'image' && m.series !== 'video');
-  }, [models, wallet]);
+    return models.filter(m => (
+      m.enabled &&
+      (wallet.credits[m.id] || 0) > 0 &&
+      m.series !== 'image' &&
+      m.series !== 'video' &&
+      getSwapPMCPerCredit(m.id) > 0
+    ));
+  }, [models, wallet, getSwapPMCPerCredit]);
+
+  React.useEffect(() => {
+    if (!showSwap) return;
+    if (swapModels.length === 0) {
+      setSwapModelId('');
+      return;
+    }
+    if (!swapModelId || !swapModels.some(model => model.id === swapModelId)) {
+      setSwapModelId(swapModels[0].id);
+      setSwapQty(1);
+    }
+  }, [showSwap, swapModelId, swapModels]);
 
   const handleSwap = useCallback(() => {
     if (!swapModelId || swapQty <= 0) return;
     const model = models.find(m => m.id === swapModelId);
     if (!model) return;
+    const available = wallet?.credits[swapModelId] || 0;
+    const safeQty = Math.max(1, Math.min(available, Math.floor(Number.isFinite(swapQty) ? swapQty : 1)));
+    const expectedPMCPerCredit = getSwapPMCPerCredit(swapModelId);
+    if (expectedPMCPerCredit <= 0) {
+      import('sonner').then(({ toast }) => {
+        toast.error('이 모델은 환전 가능한 PMC가 없어 환전할 수 없습니다.');
+      });
+      return;
+    }
     const pricePerCredit = getFixedDisplayPriceOrFallback(model.id, model.piWon).price;
-    const result = swapCreditsToPMC([{ modelId: swapModelId, qty: swapQty, pricePerCredit }]);
+    const result = swapCreditsToPMC([{ modelId: swapModelId, qty: safeQty, pricePerCredit }]);
     if (result.success) {
       import('sonner').then(({ toast }) => {
         toast.success(`✅ 환전 완료! +${result.totalPMC} PMC (수수료 ${result.totalFee}원)`);
@@ -134,10 +168,10 @@ export const Dashboard: React.FC = () => {
       setSwapQty(1);
     } else {
       import('sonner').then(({ toast }) => {
-        toast.error('환전에 실패했습니다. 크레딧이 충분한지 확인해주세요.');
+        toast.error('환전 가능한 모델 또는 수량을 다시 확인해주세요.');
       });
     }
-  }, [swapModelId, swapQty, models, swapCreditsToPMC]);
+  }, [swapModelId, swapQty, models, wallet, swapCreditsToPMC, getSwapPMCPerCredit]);
   
   if (!wallet) {
     return (
@@ -273,10 +307,16 @@ export const Dashboard: React.FC = () => {
               </button>
             ) : (
               <div className="space-y-2">
+                {swapModels.length === 0 && (
+                  <div className="text-sm text-blue-700 bg-white/70 border border-blue-200 rounded-lg px-3 py-2">
+                    현재 환전 가능한 크레딧이 없습니다.
+                  </div>
+                )}
                 <select
                   value={swapModelId}
                   onChange={e => { setSwapModelId(e.target.value); setSwapQty(1); }}
                   className="w-full text-sm px-3 py-2 border border-blue-300 rounded-lg bg-white focus:outline-none"
+                  disabled={swapModels.length === 0}
                 >
                   <option value="">모델 선택...</option>
                   {swapModels.map(m => (
@@ -296,7 +336,7 @@ export const Dashboard: React.FC = () => {
                         onChange={e => setSwapQty(Number(e.target.value))}
                         className="w-20 text-sm px-3 py-2 border border-blue-300 rounded-lg focus:outline-none"
                       />
-                      <span className="text-xs text-gray-500">개 = +{swapQty * getFixedDisplayPriceOrFallback(swapModelId, models.find(m => m.id === swapModelId)?.piWon || 0).price - swapQty} PMC</span>
+                      <span className="text-xs text-gray-500">개 = +{swapQty * getSwapPMCPerCredit(swapModelId)} PMC</span>
                     </div>
                     <div className="flex gap-2">
                       <button
@@ -325,13 +365,13 @@ export const Dashboard: React.FC = () => {
               <h3 className="text-sm font-bold text-yellow-800">저장된 답변</h3>
             </div>
             {bookmarkedMessages.length === 0 ? (
-              <p className="text-sm text-yellow-600">저장된 답변이 없습니다. 채팅에서 ⭐를 눌러 저장하세요.</p>
+              <p className="text-sm text-yellow-600">저장된 답변이 없습니다. 채팅에서 북마크 버튼을 눌러 저장하세요.</p>
             ) : (
               <>
                 <p className="text-2xl font-bold text-yellow-700 mb-1">{bookmarkedMessages.length}개</p>
                 <div className="space-y-1 max-h-[80px] overflow-hidden">
                   {bookmarkedMessages.slice(0, 2).map(bm => (
-                    <p key={bm.id} className="text-xs text-yellow-700 truncate">⭐ {bm.content.slice(0, 60)}...</p>
+                    <p key={bm.id} className="text-xs text-yellow-700 truncate">{bm.content.slice(0, 60)}...</p>
                   ))}
                 </div>
                 <button

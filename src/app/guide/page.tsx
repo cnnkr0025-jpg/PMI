@@ -100,13 +100,14 @@ export default function GuidePage() {
               <>
                 <p>Pick-My-AI에서 지원하는 주요 AI 모델입니다:</p>
                 <div className="mt-2 space-y-2">
-                  <p><strong>OpenAI GPT 시리즈</strong> — GPT-4o, GPT-4.1, GPT-5 시리즈 등 최신 GPT 모델</p>
+                  <div className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
                   <p><strong>OpenAI o 시리즈</strong> — o3, o3-mini, o4-mini 등 추론 특화 모델</p>
                   <p><strong>Anthropic Claude</strong> — Claude 3.5 Sonnet, Claude 4 Sonnet 등</p>
                   <p><strong>Google Gemini</strong> — Gemini 2.5 Pro, Gemini 3.0 Flash 등 멀티모달 AI</p>
-                  <p><strong>Perplexity</strong> — 실시간 웹 검색 기반 답변 제공</p>
+                  <p><strong>Perplexity</strong> — 자료 조사와 출처 정리에 강한 리서치형 모델</p>
                   <p><strong>이미지 생성</strong> — DALL-E 3, GPT Image 1</p>
                   <p><strong>영상 생성</strong> — Sora 2 시리즈 (초당 과금)</p>
+                  </div>
                 </div>
               </>
             ),
@@ -118,22 +119,22 @@ export default function GuidePage() {
                 <p className="mb-3">모든 가격은 1회 사용 기준입니다. 토큰 상한 내에서 무제한 사용 가능합니다.</p>
                 <div className="space-y-4">
                   <div>
-                    <h4 className="font-semibold text-green-700 mb-2">🟢 Claude Haiku</h4>
+                    <h4 className="font-semibold text-green-700 mb-2">Claude Haiku</h4>
                     <p className="text-sm">• Haiku 3.5: <strong>5원/회</strong> (토큰: 1000 in / 1000 out)</p>
                     <p className="text-sm">• Haiku 4.5: <strong>15원/회</strong> (토큰: 1000 in / 1000 out)</p>
                   </div>
                   <div>
-                    <h4 className="font-semibold text-yellow-700 mb-2">🟡 Claude Sonnet</h4>
+                    <h4 className="font-semibold text-yellow-700 mb-2">Claude Sonnet</h4>
                     <p className="text-sm">• Sonnet 4.5: <strong>45원/회</strong> (토큰: 1000 in / 1000 out)</p>
                     <p className="text-sm">• Sonnet 4.6: <strong>45원/회</strong> (토큰: 1000 in / 1000 out)</p>
                   </div>
                   <div>
-                    <h4 className="font-semibold text-blue-700 mb-2">🔵 Claude Opus (중급)</h4>
+                    <h4 className="font-semibold text-blue-700 mb-2">Claude Opus (중급)</h4>
                     <p className="text-sm">• Opus 4.5: <strong>79원/회</strong> (토큰: 1000 in / 1000 out)</p>
                     <p className="text-sm">• Opus 4.6: <strong>79원/회</strong> (토큰: 1000 in / 1000 out)</p>
                   </div>
                   <div>
-                    <h4 className="font-semibold text-red-700 mb-2">🔴 Claude Opus (프리미엄)</h4>
+                    <h4 className="font-semibold text-red-700 mb-2">Claude Opus (프리미엄)</h4>
                     <p className="text-sm">• Opus 4: <strong>199원/회</strong> (토큰: 1000 in / 1000 out)</p>
                     <p className="text-sm">• Opus 4.1: <strong>199원/회</strong> (토큰: 1000 in / 1000 out)</p>
                   </div>
@@ -143,12 +144,12 @@ export default function GuidePage() {
                     <p className="text-sm">• Gemini 3.0: 8원/회 (500/500) • Perplexity Sonar: 1원/회 (300/300)</p>
                   </div>
                   <div>
-                    <h4 className="font-semibold text-purple-700 mb-2">🎨 이미지 & 영상</h4>
+                    <h4 className="font-semibold text-purple-700 mb-2">이미지 & 영상</h4>
                     <p className="text-sm">• GPT Image 1: 40원/회</p>
                     <p className="text-sm">• Sora 2-720p: 190원/초 • Sora 2 Pro-720p: 450원/초 • Sora 2 Pro-1024p: 750원/초</p>
                   </div>
                 </div>
-                <p className="mt-4 text-xs text-amber-600 bg-amber-50 px-3 py-2 rounded">💡 영상 모델은 할인/프로모션 미적용</p>
+                <p className="mt-4 text-xs text-amber-600 bg-amber-50 px-3 py-2 rounded">영상 모델은 할인/프로모션 미적용</p>
               </>
             ),
           },
@@ -186,12 +187,12 @@ export default function GuidePage() {
               <>
                 <p>문제가 발생했을 때 참고하세요:</p>
                 <ul className="list-disc list-inside space-y-2 mt-2">
-                  <li><strong>⏱️ 응답 시간 초과</strong> — 질문을 짧게 줄이거나 잠시 후 다시 시도하세요.</li>
-                  <li><strong>🕐 요청 한도 초과</strong> — 1~2분 후 다시 시도하거나 다른 AI 모델을 사용해보세요.</li>
-                  <li><strong>🔧 서비스 점검 중</strong> — 일시적으로 이용 불가합니다. 잠시 후 시도하거나 다른 모델을 사용하세요.</li>
-                  <li><strong>🌐 연결 오류</strong> — 인터넷 연결을 확인하고 다시 시도하세요.</li>
-                  <li><strong>💬 AI 응답 없음</strong> — 질문을 다시 보내거나 다른 방식으로 질문하세요.</li>
-                  <li><strong>🛡️ 정책 위반</strong> — 표현을 바꿔서 다시 시도하세요.</li>
+                  <li><strong>응답 시간 초과</strong> — 질문을 짧게 줄이거나 잠시 후 다시 시도하세요.</li>
+                  <li><strong>요청 한도 초과</strong> — 1~2분 후 다시 시도하거나 다른 AI 모델을 사용해보세요.</li>
+                  <li><strong>서비스 점검 중</strong> — 일시적으로 이용 불가합니다. 잠시 후 시도하거나 다른 모델을 사용하세요.</li>
+                  <li><strong>연결 오류</strong> — 인터넷 연결을 확인하고 다시 시도하세요.</li>
+                  <li><strong>AI 응답 없음</strong> — 질문을 다시 보내거나 다른 방식으로 질문하세요.</li>
+                  <li><strong>정책 위반</strong> — 표현을 바꿔서 다시 시도하세요.</li>
                 </ul>
                 <p className="mt-3 text-xs text-gray-500">에러코드(예: <code>ERR_NET_01</code>)를 함께 전달하면 더 빨리 확인할 수 있어요.</p>
               </>
@@ -273,22 +274,22 @@ export default function GuidePage() {
                 <p className="mb-3">All prices are per use. Unlimited usage within token limits.</p>
                 <div className="space-y-4">
                   <div>
-                    <h4 className="font-semibold text-green-700 mb-2">🟢 Claude Haiku</h4>
+                    <h4 className="font-semibold text-green-700 mb-2">Claude Haiku</h4>
                     <p className="text-sm">• Haiku 3.5: <strong>₩5/use</strong> (tokens: 1000 in / 1000 out)</p>
                     <p className="text-sm">• Haiku 4.5: <strong>₩15/use</strong> (tokens: 1000 in / 1000 out)</p>
                   </div>
                   <div>
-                    <h4 className="font-semibold text-yellow-700 mb-2">🟡 Claude Sonnet</h4>
+                    <h4 className="font-semibold text-yellow-700 mb-2">Claude Sonnet</h4>
                     <p className="text-sm">• Sonnet 4.5: <strong>₩45/use</strong> (tokens: 1000 in / 1000 out)</p>
                     <p className="text-sm">• Sonnet 4.6: <strong>₩45/use</strong> (tokens: 1000 in / 1000 out)</p>
                   </div>
                   <div>
-                    <h4 className="font-semibold text-blue-700 mb-2">🔵 Claude Opus (Mid)</h4>
+                    <h4 className="font-semibold text-blue-700 mb-2">Claude Opus (Mid)</h4>
                     <p className="text-sm">• Opus 4.5: <strong>₩79/use</strong> (tokens: 1000 in / 1000 out)</p>
                     <p className="text-sm">• Opus 4.6: <strong>₩79/use</strong> (tokens: 1000 in / 1000 out)</p>
                   </div>
                   <div>
-                    <h4 className="font-semibold text-red-700 mb-2">🔴 Claude Opus (Premium)</h4>
+                    <h4 className="font-semibold text-red-700 mb-2">Claude Opus (Premium)</h4>
                     <p className="text-sm">• Opus 4: <strong>₩199/use</strong> (tokens: 1000 in / 1000 out)</p>
                     <p className="text-sm">• Opus 4.1: <strong>₩199/use</strong> (tokens: 1000 in / 1000 out)</p>
                   </div>
@@ -298,12 +299,12 @@ export default function GuidePage() {
                     <p className="text-sm">• Gemini 3.0: ₩8/use (500/500) • Perplexity Sonar: ₩1/use (300/300)</p>
                   </div>
                   <div>
-                    <h4 className="font-semibold text-purple-700 mb-2">🎨 Image & Video</h4>
+                    <h4 className="font-semibold text-purple-700 mb-2">Image & Video</h4>
                     <p className="text-sm">• GPT Image 1: ₩40/use</p>
                     <p className="text-sm">• Sora 2-720p: ₩190/sec • Sora 2 Pro-720p: ₩450/sec • Sora 2 Pro-1024p: ₩750/sec</p>
                   </div>
                 </div>
-                <p className="mt-4 text-xs text-amber-600 bg-amber-50 px-3 py-2 rounded">💡 No discounts on video models</p>
+                <p className="mt-4 text-xs text-amber-600 bg-amber-50 px-3 py-2 rounded">No discounts on video models</p>
               </>
             ),
           },

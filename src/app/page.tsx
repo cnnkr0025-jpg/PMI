@@ -1,15 +1,8 @@
-'use client';
+import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
 
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-
-export default function HomePage() {
-  const router = useRouter();
-
-  useEffect(() => {
-    router.push('/chat');
-  }, [router]);
-
-  return null;
+export default async function HomePage() {
+  const cookieStore = await cookies();
+  const hasSession = Boolean(cookieStore.get('session')?.value);
+  redirect(hasSession ? '/chat' : '/guide');
 }
-

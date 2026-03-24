@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from './supabase';
-import { jwtVerify } from 'jose';
+import { verifySecureToken } from './secureAuth';
+import { SESSION_COOKIE_NAME } from './serverSecurity';
 
 /**
  * API 요청 인증 미들웨어
@@ -105,28 +106,25 @@ export async function verifySession(request: NextRequest): Promise<{
   error?: string 
 }> {
   try {
-    const sessionToken = request.cookies.get('session')?.value;
+    const sessionToken = request.cookies.get(SESSION_COOKIE_NAME)?.value;
 
     if (!sessionToken) {
       return { authenticated: false, error: '세션 토큰이 없습니다.' };
     }
 
-    const secret = process.env.JWT_SECRET;
-    if (!secret) {
-      return { authenticated: false, error: 'JWT_SECRET이 설정되지 않았습니다.' };
+    const verification = await verifySecureToken(sessionToken);
+    if (!verification.valid || !verification.payload) {
+      return {
+        authenticated: false,
+        error: verification.error || '세션 검증 실패',
+      };
     }
-
-    const key = new TextEncoder().encode(secret);
-
-    const { payload } = await jwtVerify(sessionToken, key, {
-      algorithms: ['HS256'],
-    });
 
     return {
       authenticated: true,
-      userId: payload.userId as string,
-      email: payload.email as string,
-      name: payload.name as string,
+      userId: verification.payload.userId,
+      email: verification.payload.email,
+      name: verification.payload.name,
     };
   } catch (error: any) {
     return {

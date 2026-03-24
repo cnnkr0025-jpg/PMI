@@ -21,7 +21,7 @@ export function validateAndInitializeEnv(): void {
   
   // 경고 출력
   if (validation.warnings.length > 0) {
-    console.warn('⚠️  환경 변수 보안 경고:');
+    console.warn('환경 변수 보안 경고:');
     validation.warnings.forEach(warning => {
       console.warn(`  - ${warning}`);
     });

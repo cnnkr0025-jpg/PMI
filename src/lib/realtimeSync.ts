@@ -126,7 +126,7 @@ export const unsubscribeFromRealtimeUpdates = () => {
   }
 
   if (process.env.NODE_ENV !== 'production') {
-    console.log('🔌 Unsubscribed from all realtime updates');
+    console.log('Unsubscribed from all realtime updates');
   }
 };
 
@@ -134,7 +134,7 @@ export const initializeRealtimeSync = (userId: string) => {
   if (!userId) return;
 
   if (process.env.NODE_ENV !== 'production') {
-    console.log('🚀 Initializing realtime sync for user:', userId);
+    console.log('Initializing realtime sync for user:', userId);
   }
 
   subscribeToWalletUpdates(userId);

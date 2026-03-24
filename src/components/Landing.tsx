@@ -45,24 +45,14 @@ const features = [
   },
 ];
 
-// pricingExamples는 실제 가격과 동기화를 위해 pricing.ts의 fixedDisplayPriceWon을 참조하도록 수정
-const pricingExamples = [
-  {
-    id: 'gpt5',
-    title: 'GPT-5',
-    price: 7, // fixedDisplayPriceWon['gpt5']
-  },
-  {
-    id: 'sonnet45',
-    title: 'Claude Sonnet 4.5',
-    price: 30, // fixedDisplayPriceWon['sonnet45']
-  },
-  {
-    id: 'sonar',
-    title: 'Perplexity Sonar',
-    price: 3, // fixedDisplayPriceWon['sonar']
-  },
-] as const;
+const pricingExamples = ['gpt53instant', 'gpt54', 'sonnet46'].map((id) => {
+  const model = initialModels.find((item) => item.id === id)!;
+  return {
+    id,
+    title: model.displayName,
+    price: getFixedDisplayPriceOrFallback(model.id, model.piWon).price,
+  };
+});
 
 export const Landing: React.FC = () => {
   const router = useRouter();

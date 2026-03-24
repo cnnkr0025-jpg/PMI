@@ -1,10 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { verifySession } from '@/lib/apiAuth';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
   try {
+    const session = await verifySession(req);
+    if (!session.authenticated || !session.userId) {
+      return NextResponse.json({ error: 'ERR_AUTH', reason: '로그인이 필요합니다.' }, { status: 401 });
+    }
+
     const { question, models, speechLevel, language, premium } = await req.json();
 
     if (!question?.trim()) {
@@ -16,7 +22,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'API 키가 없습니다.' }, { status: 500 });
     }
 
-    const modelList = (models || []).map((m: any) => `- ${m.id}: ${m.displayName} (${m.description || ''})`).join('\n');
+    const modelList = (models || []).map((m: any) => `- ${m.displayName} (${m.description || ''})`).join('\n');
     const tone = speechLevel === 'informal' ? '반말로 짧게' : '존댓말로 짧게';
 
     let systemPrompt: string;
@@ -24,12 +30,12 @@ export async function POST(req: NextRequest) {
 
     if (premium) {
       // 프리미엄: 5위까지 순위와 이유
-      systemPrompt = `당신은 AI 모델 추천 전문가입니다. 사용자의 질문을 분석해서 가장 적합한 AI 모델을 순위별로 추천해주세요.`;
-      userPrompt = `사용 가능한 AI 모델 목록:\n${modelList}\n\n사용자 질문: "${question}"\n\n위 질문에 가장 적합한 모델을 1위부터 5위까지 ${tone} 추천해주세요. 각 모델마다 모델명과 한 줄 이유를 포함하세요. 없는 모델은 제외하세요.`;
+      systemPrompt = `당신은 AI 모델 추천 전문가입니다. 사용자의 질문을 분석해서 가장 적합한 AI 모델을 순위별로 추천해주세요. 반드시 제공된 표시명(display name)만 사용하고, 내부 코드명이나 ID(gpt52, haiku45 같은 값)는 절대 출력하지 마세요.`;
+      userPrompt = `사용 가능한 AI 모델 목록:\n${modelList}\n\n사용자 질문: "${question}"\n\n위 질문에 가장 적합한 모델을 1위부터 5위까지 ${tone} 추천해주세요. 각 모델마다 모델명과 한 줄 이유를 포함하세요. 반드시 위 목록에 있는 표시명만 그대로 쓰고, 없는 모델은 제외하세요.`;
     } else {
       // 일반: 1줄 추천
-      systemPrompt = `당신은 AI 모델 추천 전문가입니다. 사용자의 질문에 가장 적합한 AI 모델을 1줄로 추천해주세요.`;
-      userPrompt = `사용 가능한 AI 모델 목록:\n${modelList}\n\n사용자 질문: "${question}"\n\n${tone} 어떤 모델이 가장 좋을지 1줄로만 말해주세요. 반드시 실제 모델명을 포함하세요.`;
+      systemPrompt = `당신은 AI 모델 추천 전문가입니다. 사용자의 질문에 가장 적합한 AI 모델을 1줄로 추천해주세요. 반드시 제공된 표시명(display name)만 사용하고, 내부 코드명이나 ID(gpt52, haiku45 같은 값)는 절대 출력하지 마세요.`;
+      userPrompt = `사용 가능한 AI 모델 목록:\n${modelList}\n\n사용자 질문: "${question}"\n\n${tone} 어떤 모델이 가장 좋을지 1줄로만 말해주세요. 반드시 위 목록에 있는 실제 표시명만 포함하세요.`;
     }
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -44,7 +50,7 @@ export async function POST(req: NextRequest) {
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
         ],
-        max_tokens: premium ? 400 : 80,
+        max_completion_tokens: premium ? 400 : 80,
         temperature: 0.3,
       }),
     });

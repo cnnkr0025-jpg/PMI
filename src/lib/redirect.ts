@@ -6,15 +6,34 @@
 /**
  * 환경에 맞는 기본 URL 가져오기
  */
+function normalizeBaseUrl(rawUrl?: string): string | null {
+  if (!rawUrl) return null;
+
+  const trimmed = rawUrl.trim().replace(/\/+$/, '');
+  if (!trimmed) return null;
+
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed;
+  }
+
+  if (/^(localhost|127\.0\.0\.1)(:\d+)?$/i.test(trimmed)) {
+    return `http://${trimmed}`;
+  }
+
+  return `https://${trimmed}`;
+}
+
 export function getBaseUrl(): string {
+  const envBaseUrl = normalizeBaseUrl(process.env.NEXT_PUBLIC_APP_URL);
+
   // 서버 사이드에서는 환경 변수만 사용
   if (typeof window === 'undefined') {
-    return process.env.NEXT_PUBLIC_APP_URL || 'https://pickmyai.store';
+    return envBaseUrl || 'https://pickmyai.store';
   }
   
   // 클라이언트 사이드에서는 환경 변수 우선
-  if (process.env.NEXT_PUBLIC_APP_URL) {
-    return process.env.NEXT_PUBLIC_APP_URL;
+  if (envBaseUrl) {
+    return envBaseUrl;
   }
 
   // 현재 도메인 그대로 사용 (OAuth 콜백을 위해)

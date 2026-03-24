@@ -116,7 +116,7 @@ export class AuthService {
               
               // RLS 정책 오류인 경우 특별히 로깅
               if (insertError.message.includes('policy') || insertError.message.includes('permission')) {
-                console.error('⚠️ RLS 정책 오류 감지! Supabase Dashboard에서 RLS 정책을 확인하세요.');
+                console.error('RLS 정책 오류 감지! Supabase Dashboard에서 RLS 정책을 확인하세요.');
                 console.error('FIX_USERS_TABLE.sql 파일을 실행하세요.');
               }
             }
