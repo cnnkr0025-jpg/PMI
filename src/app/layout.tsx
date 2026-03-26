@@ -39,10 +39,16 @@ export default function RootLayout({
         {/* DNS 프리페치 + 프리커넥트: 주요 외부 도메인 연결 선점 */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link rel="dns-prefetch" href="https://api.openai.com" />
-        <link rel="dns-prefetch" href="https://api.anthropic.com" />
+        {/* AI API 도메인: dns-prefetch → preconnect 격상 (실제 요청 발생 도메인) */}
+        <link rel="preconnect" href="https://api.openai.com" />
+        <link rel="preconnect" href="https://api.anthropic.com" />
         <link rel="dns-prefetch" href="https://api.perplexity.ai" />
+        <link rel="dns-prefetch" href="https://generativelanguage.googleapis.com" />
         <link rel="dns-prefetch" href="https://js.toss.im" />
+        {/* Supabase: 인증·실시간 연결에 사용되므로 preconnect */}
+        {process.env.NEXT_PUBLIC_SUPABASE_URL && (
+          <link rel="preconnect" href={process.env.NEXT_PUBLIC_SUPABASE_URL} />
+        )}
         {/* 예측적 프리페치: 마우스 hover 시 해당 페이지 JS 미리 로드 */}
         <script dangerouslySetInnerHTML={{ __html: `
 (function(){

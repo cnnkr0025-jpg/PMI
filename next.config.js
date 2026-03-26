@@ -37,8 +37,8 @@ const nextConfig = {
       'zustand',
       'sonner',
       '@supabase/supabase-js',
-      'react-markdown',
-      'date-fns',
+      'recharts',
+      'katex',
     ],
   },
 
@@ -59,6 +59,31 @@ const nextConfig = {
       config.optimization = {
         ...config.optimization,
         moduleIds: 'deterministic',
+        splitChunks: {
+          ...config.optimization.splitChunks,
+          cacheGroups: {
+            ...(config.optimization.splitChunks?.cacheGroups || {}),
+            // 무거운 라이브러리를 별도 청크로 분리 (초기 번들 최소화)
+            recharts: {
+              name: 'recharts',
+              test: /[\\/]node_modules[\\/]recharts[\\/]/,
+              chunks: 'all',
+              priority: 30,
+            },
+            katex: {
+              name: 'katex',
+              test: /[\\/]node_modules[\\/]katex[\\/]/,
+              chunks: 'all',
+              priority: 30,
+            },
+            supabase: {
+              name: 'supabase',
+              test: /[\\/]node_modules[\\/]@supabase[\\/]/,
+              chunks: 'all',
+              priority: 20,
+            },
+          },
+        },
       };
     }
 
@@ -103,7 +128,7 @@ const nextConfig = {
       {
         source: '/:path*',
         headers: [
-          { key: 'X-DNS-Prefetch-Control', value: 'off' },
+          { key: 'X-DNS-Prefetch-Control', value: 'on' },
           {
             key: 'Strict-Transport-Security',
             value: 'max-age=63072000; includeSubDomains; preload',

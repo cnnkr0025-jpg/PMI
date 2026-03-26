@@ -102,11 +102,19 @@ export function SessionInitializer() {
             hasFirstPurchase: savedLocalHasFirstPurchase || Object.keys(savedLocalCredits).length > 0,
           });
 
-          // 서버에서 사용자 데이터(지갑 + 설정) 로드 후 병합
-          try {
-            const { loadUserData } = await import('@/lib/userDataSync');
-            const userData = await loadUserData();
+          // 서버 데이터(지갑/설정) + 채팅 세션을 병렬로 로드
+          const [userDataMod, chatSyncMod] = await Promise.all([
+            import('@/lib/userDataSync').catch(() => null),
+            import('@/lib/chatSync').catch(() => null),
+          ]);
 
+          const [userData, sessionsResult] = await Promise.all([
+            userDataMod ? userDataMod.loadUserData().catch(() => null) : Promise.resolve(null),
+            chatSyncMod ? chatSyncMod.ChatSyncService.loadChatSessions().catch(() => null) : Promise.resolve(null),
+          ]);
+
+          // 사용자 데이터(지갑 + 설정) 처리
+          try {
             if (userData) {
               const stateUpdate: Record<string, any> = {};
 
@@ -201,9 +209,7 @@ export function SessionInitializer() {
 
           // 채팅 세션 로드 (서버 세션과 로컬 세션 병합)
           try {
-            const { ChatSyncService } = await import('@/lib/chatSync');
-            const sessionsResult = await ChatSyncService.loadChatSessions();
-            if (sessionsResult.success && sessionsResult.sessions) {
+            if (sessionsResult && sessionsResult.success && sessionsResult.sessions) {
               const serverSessions = sessionsResult.sessions;
               
               // 로컬 세션 가져오기 (localStorage에서 직접 + store에서)

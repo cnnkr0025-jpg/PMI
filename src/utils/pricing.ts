@@ -303,15 +303,10 @@ export function getFixedDisplayPriceOrFallback(
   fallbackTier?: PriceTier,
 ): { price: number; tier: PriceTier } {
   const data = modelData[modelId];
-  if (data) {
-    return { price: data.price, tier: data.tier };
-  }
-  return { 
-    // 고정 판매가 매핑이 없는 모델은 `models.ts`의 piWon을 그대로 표시 가격으로 사용
-    // (fallback에서 임의 마진 계산을 하면 UI가 models.ts 값과 불일치할 수 있음)
-    price: piWon,
-    tier: fallbackTier ?? 'low'
-  };
+  // UI/계산 기준은 `models.ts`의 piWon이므로, 가격은 항상 piWon을 사용.
+  // modelData는 과거 티어 보조용(티어가 없을 때만)으로만 사용한다.
+  const tier: PriceTier = fallbackTier ?? data?.tier ?? 'low';
+  return { price: piWon, tier };
 }
 
 // ==================== PMC (Pick-My-Coin) 시스템 ====================

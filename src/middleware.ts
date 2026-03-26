@@ -146,7 +146,7 @@ function setSecurityHeaders(response: NextResponse): NextResponse {
   response.headers.set('X-XSS-Protection', '1; mode=block');
   response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
   response.headers.set('Permissions-Policy', 'geolocation=(), microphone=(), camera=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=()');
-  response.headers.set('X-DNS-Prefetch-Control', 'off');
+  response.headers.set('X-DNS-Prefetch-Control', 'on');
   response.headers.set('X-Download-Options', 'noopen');
   response.headers.set('X-Permitted-Cross-Domain-Policies', 'none');
   // Cross-Origin 격리 헤더
@@ -186,26 +186,26 @@ export async function middleware(request: NextRequest) {
     return new NextResponse(null, { status: 404 });
   }
 
-  // ④ 악성 User-Agent 차단 (API 경로에서만 — 정상 브라우저는 통과)
-  if (pathname.startsWith('/api/')) {
-    const ua = request.headers.get('user-agent');
-    if (isMaliciousUA(ua)) {
-      return NextResponse.json({ error: '요청이 거부되었습니다.' }, { status: 403 });
-    }
-  }
-
-  // ⑤ 버스트 요청 탐지 (2초 내 15개 이상)
-  if (isBurstRequest(clientIp)) {
-    return NextResponse.json({ error: '요청 속도가 너무 빠릅니다.' }, { status: 429 });
-  }
-
-  // 보호된 경로 정의
+  // 보호된 경로 정의 (악성 UA / 버스트 체크 전에 먼저 일반 경로 조기 반환)
   const protectedPaths = ['/chat', '/dashboard', '/settings', '/configurator', '/checkout', '/feedback'];
   const isProtectedPath = protectedPaths.some(p => pathname.startsWith(p));
   const isApiPath = pathname.startsWith('/api/');
 
   if (!isProtectedPath && !isApiPath) {
     return setSecurityHeaders(NextResponse.next());
+  }
+
+  // ④ 악성 User-Agent 차단 (API 경로에서만 — 정상 브라우저는 통과)
+  if (isApiPath) {
+    const ua = request.headers.get('user-agent');
+    if (isMaliciousUA(ua)) {
+      return NextResponse.json({ error: '요청이 거부되었습니다.' }, { status: 403 });
+    }
+  }
+
+  // ⑤ 버스트 요청 탐지 (2초 내 15개 이상) — 보호 경로/API에만 적용
+  if (isBurstRequest(clientIp)) {
+    return NextResponse.json({ error: '요청 속도가 너무 빠릅니다.' }, { status: 429 });
   }
 
   // 보호된 경로에 대한 세션 검증
