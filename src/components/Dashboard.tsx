@@ -31,6 +31,10 @@ export const Dashboard: React.FC = () => {
   const [swapQty, setSwapQty] = React.useState(1);
   const [showSwap, setShowSwap] = React.useState(false);
   const { t } = useTranslation();
+
+  React.useEffect(() => {
+    router.prefetch('/chat');
+  }, [router]);
   
   // PMC 잔액
   const availablePMC = getAvailablePMC();

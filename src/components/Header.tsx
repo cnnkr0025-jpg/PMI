@@ -45,6 +45,12 @@ export const Header = React.memo(() => {
     return () => document.removeEventListener('mousedown', handleDocMouseDown);
   }, [isLanguageMenuOpen]);
 
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    router.prefetch('/chat');
+    void import('@/components/Chat');
+  }, [isAuthenticated, router]);
+
   const ui = useMemo(() => {
     if (language === 'en') {
       return {
@@ -98,7 +104,7 @@ export const Header = React.memo(() => {
           <div className="flex items-center space-x-1">
             {isAuthenticated && currentUser ? (
               <>
-                <Link href="/chat" className={`preview-nav-chat-tab px-3 py-2 rounded-lg text-sm transition-colors ${pathname === '/chat' ? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white font-medium' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white'}`}>{ui.chat}</Link>
+                <Link href="/chat" onMouseEnter={() => router.prefetch('/chat')} className={`preview-nav-chat-tab px-3 py-2 rounded-lg text-sm transition-colors ${pathname === '/chat' ? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white font-medium' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white'}`}>{ui.chat}</Link>
                 <Link href="/configurator" className={`preview-nav-home-tab px-3 py-2 rounded-lg text-sm transition-colors ${pathname === '/configurator' ? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white font-medium' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white'}`}>{ui.configurator}</Link>
                 <Link href="/dashboard" className={`preview-nav-dashboard-tab px-3 py-2 rounded-lg text-sm transition-colors ${pathname === '/dashboard' ? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white font-medium' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white'}`}>{ui.dashboard}</Link>
                 <Link href="/feedback" className={`px-3 py-2 rounded-lg text-sm transition-colors ${pathname === '/feedback' ? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white font-medium' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white'}`}>{ui.feedback}</Link>

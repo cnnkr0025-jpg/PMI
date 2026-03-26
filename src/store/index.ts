@@ -1959,7 +1959,15 @@ export const useStore = create<AppState>()(
     {
       name: 'pick-my-ai-storage',
       storage: createJSONStorage(() => {
-        const storage = localStorage;
+        if (typeof window === 'undefined') {
+          return {
+            getItem: () => null,
+            setItem: () => {},
+            removeItem: () => {},
+          };
+        }
+
+        const storage = window.localStorage;
 
         return {
           getItem: (key: string) => {
@@ -2047,9 +2055,9 @@ export const useStore = create<AppState>()(
           state.models = initialModels;
         }
         
-        if (state?.currentUser) {
+        if (state?.currentUser && typeof window !== 'undefined') {
           const userId = state.currentUser.id;
-          const storage = localStorage.getItem('pick-my-ai-storage');
+          const storage = window.localStorage.getItem('pick-my-ai-storage');
           
           if (storage) {
             try {

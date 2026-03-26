@@ -140,10 +140,14 @@ const readApiErrorResponse = async (response: Response): Promise<{ errorCode: st
     (typeof errorData?.error === 'string' && errorData.error) ||
     (errorReason ? extractErrorCodeToken(errorReason) : undefined) ||
     getStatusFallbackErrorCode(response.status);
+  const normalizedReason = (errorReason || '').toLowerCase();
+  const normalizedErrorCode = normalizedReason.includes('body stream buffer was aborted') || normalizedReason.includes('bodystreambuffer was aborted')
+    ? 'ERR_CANCELLED'
+    : errorCode;
 
   return {
-    errorCode,
-    errorReason: errorReason && errorReason !== errorCode ? errorReason : undefined,
+    errorCode: normalizedErrorCode,
+    errorReason: errorReason && errorReason !== normalizedErrorCode ? errorReason : undefined,
   };
 };
 
@@ -456,7 +460,7 @@ export const Chat: React.FC = () => {
   const [draftMessageId, setDraftMessageId] = useState<string | null>(null);
   const [draftContent, setDraftContent] = useState('');
   const draftContentRef = useRef('');
-  const [isCancelled, setIsCancelled] = useState(false);
+  const cancelRequestedRef = useRef(false);
   const lastDraftFlushRef = useRef(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [conversationSummaries, setConversationSummaries] = useState<ConversationSummary[]>([]);
@@ -643,7 +647,7 @@ export const Chat: React.FC = () => {
     streamingRef.current = false;
     sendInFlightRef.current = false;
     setIsLoading(false);
-    setIsCancelled(false);
+    cancelRequestedRef.current = false;
     return () => {
       isMountedRef.current = false;
       if (abortControllerRef.current) {
@@ -694,7 +698,7 @@ export const Chat: React.FC = () => {
             }
             streamingRef.current = false;
             setIsLoading(false);
-            setIsCancelled(false);
+            cancelRequestedRef.current = false;
           }
         }
       }
@@ -715,7 +719,7 @@ export const Chat: React.FC = () => {
           }
           streamingRef.current = false;
           setIsLoading(false);
-          setIsCancelled(false);
+          cancelRequestedRef.current = false;
         }
       }
     };
@@ -1108,7 +1112,7 @@ export const Chat: React.FC = () => {
     }
     streamingRef.current = false;
     setIsLoading(false);
-    setIsCancelled(true);
+    cancelRequestedRef.current = true;
     toast.info('응답 생성이 취소되었습니다.');
   }, []);
 
@@ -1252,7 +1256,7 @@ export const Chat: React.FC = () => {
     sendInFlightRef.current = true;
     setIsLoading(true);
     streamingRef.current = true;
-    setIsCancelled(false);
+    cancelRequestedRef.current = false;
     startDraftMessage(lastAssistant.id);
     const controller = new AbortController();
     abortControllerRef.current = controller;
@@ -1330,7 +1334,7 @@ export const Chat: React.FC = () => {
     sendInFlightRef.current = true;
     setIsLoading(true);
     streamingRef.current = true;
-    setIsCancelled(false);
+    cancelRequestedRef.current = false;
     
     // 현재 선택된 모델 ID를 고정 (출력 중 모델 선택이 바뀌어도 메시지의 모델은 유지)
     const currentModelId = selectedModelId;
@@ -1343,9 +1347,11 @@ export const Chat: React.FC = () => {
     }
 
     if (!sessionIdForThisRequest) {
-      const sessionError = new Error('ERR_SESSION_00') as Error & { detail?: string };
-      sessionError.detail = '대화를 만들지 못했어요. 잠시 후 다시 시도해주세요.';
-      throw sessionError;
+      sendInFlightRef.current = false;
+      streamingRef.current = false;
+      setIsLoading(false);
+      toast.error('대화를 만들지 못했어요. 잠시 후 다시 시도해주세요.');
+      return;
     }
 
     const assistantMessageId = sessionIdForThisRequest ? crypto.randomUUID() : null;
@@ -1523,7 +1529,7 @@ export const Chat: React.FC = () => {
           signal: controller.signal
         });
         // 500/503 서버 에러 시 1.5초 후 1회 자동 재시도
-        if ((response.status === 500 || response.status === 503) && !isCancelled) {
+        if ((response.status === 500 || response.status === 503) && !cancelRequestedRef.current) {
           await new Promise(r => setTimeout(r, 1500));
           response = await fetch('/api/chat', {
             method: 'POST',
@@ -1535,7 +1541,7 @@ export const Chat: React.FC = () => {
       } catch (fetchError: any) {
         clearTimeout(timeoutId);
         if (fetchError.name === 'AbortError') {
-          if (isCancelled) {
+          if (cancelRequestedRef.current) {
             throw new Error('ERR_CANCELLED');
           }
           throw new Error('ERR_TIMEOUT');
@@ -1641,6 +1647,11 @@ export const Chat: React.FC = () => {
             scrollToBottom(false);
           }
           if (streamError) throw streamError;
+        } catch (streamReadError: any) {
+          if (streamReadError?.name === 'AbortError' || cancelRequestedRef.current) {
+            throw new Error('ERR_CANCELLED');
+          }
+          throw streamReadError;
         } finally {
           reader.releaseLock();
         }
@@ -1740,8 +1751,18 @@ export const Chat: React.FC = () => {
         console.error('Chat error:', error);
       }
       
-      const errorCode = error.message || 'ERR_UNKNOWN';
+      let errorCode = error.message || 'ERR_UNKNOWN';
       const errorDetail = typeof error?.detail === 'string' ? error.detail : undefined;
+      const rawErrorText = `${errorCode} ${errorDetail || ''}`.toLowerCase();
+      if (
+        error?.name === 'AbortError' ||
+        rawErrorText.includes('err_cancelled') ||
+        rawErrorText.includes('body stream buffer was aborted') ||
+        rawErrorText.includes('bodystreambuffer was aborted') ||
+        rawErrorText.includes('aborted')
+      ) {
+        errorCode = 'ERR_CANCELLED';
+      }
 
       const sid = sessionIdForThisRequest || useStore.getState().currentSessionId;
 
@@ -1911,7 +1932,7 @@ export const Chat: React.FC = () => {
       setIsLoading(false);
       streamingRef.current = false;
       abortControllerRef.current = null;
-      setIsCancelled(false);
+      cancelRequestedRef.current = false;
       sendInFlightRef.current = false;
       // 전송 후 첨부파일 완전 초기화
       setAttachments([]);
@@ -1927,7 +1948,7 @@ export const Chat: React.FC = () => {
         });
       }
     }
-  }, [message, selectedModelId, selectedModel, selectedModelMaxCharacters, walletCredits, currentSessionId, deductCredit, refundCredit, releasePendingRefundToken, addMessage, addCredits, attachments, temperature, language, activePersona, storedFacts, updateMessageContent, finalizeMessageContent, scrollToBottom, isCancelled, conversationSummaries, isBatchModel, isVideoModel, videoSeconds, startDraftMessage, flushDraftMessage, clearDraftMessage, createChatSession, isLoading, modelById, addStoredFacts, composerDraftStorageKey, removeComposerDraft]);
+  }, [message, selectedModelId, selectedModel, selectedModelMaxCharacters, walletCredits, currentSessionId, deductCredit, refundCredit, releasePendingRefundToken, addMessage, addCredits, attachments, temperature, language, activePersona, storedFacts, updateMessageContent, finalizeMessageContent, scrollToBottom, conversationSummaries, isBatchModel, isVideoModel, videoSeconds, startDraftMessage, flushDraftMessage, clearDraftMessage, createChatSession, isLoading, modelById, addStoredFacts, composerDraftStorageKey, removeComposerDraft]);
   
   const handleNewChat = useCallback(() => {
     if (isOnCooldown) return;
@@ -2485,7 +2506,7 @@ export const Chat: React.FC = () => {
                     modelById={modelById}
                     formatMessage={formatMessage}
                     onDownloadImage={handleDownloadImage}
-                    isStreaming={isLoading && msg.role === 'assistant' && !msg.content && msgIndex === messages.length - 1}
+                    isStreaming={isLoading && msg.role === 'assistant' && !String(resolvedContent ?? msg.content ?? '').trim() && msgIndex === messages.length - 1}
                     isLastAssistant={msg.role === 'assistant' && msg.id === lastAssistantMsgId && !isLoading}
                     isBookmarked={bookmarkedMessageIds.has(msg.id)}
                     onBookmark={msg.role === 'assistant' ? handleBookmark : undefined}

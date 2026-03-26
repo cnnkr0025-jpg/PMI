@@ -57,6 +57,11 @@ const pricingExamples = ['gpt53instant', 'gpt54', 'sonnet46'].map((id) => {
 export const Landing: React.FC = () => {
   const router = useRouter();
   const { isAuthenticated, logout } = useStore();
+
+  React.useEffect(() => {
+    if (!isAuthenticated) return;
+    router.prefetch('/chat');
+  }, [isAuthenticated, router]);
   const { getElementStyle, customDesignTheme, theme, getContrastColor } = useCustomTheme();
 
 

@@ -3,17 +3,26 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
+const FALLBACK_URL = 'https://placeholder.supabase.co';
+const FALLBACK_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBsYWNlaG9sZGVyIiwicm9sZSI6ImFub24iLCJpYXQiOjE2MDAwMDAwMDAsImV4cCI6MjAwMDAwMDAwMH0.placeholder';
+
 if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn('Supabase credentials not found. Using fallback local storage mode.');
+  if (typeof window === 'undefined') {
+    console.warn('[Supabase] Credentials not found. Supabase features will be unavailable.');
+  }
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    flowType: 'pkce',
-  },
-});
+export const supabase = createClient(
+  supabaseUrl || FALLBACK_URL,
+  supabaseAnonKey || FALLBACK_KEY,
+  {
+    auth: {
+      persistSession: typeof window !== 'undefined',
+      autoRefreshToken: typeof window !== 'undefined',
+      flowType: 'pkce',
+    },
+  }
+);
 
 // Database types
 export interface Database {

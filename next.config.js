@@ -7,8 +7,6 @@ const nextConfig = {
     ignoreDuringBuilds: true,
   },
 
-  // 성능 최적화
-  swcMinify: true,
   compiler: {
     removeConsole: process.env.NODE_ENV === 'production' ? { exclude: ['error', 'warn'] } : false,
     reactRemoveProperties: true,
@@ -40,8 +38,7 @@ const nextConfig = {
       'recharts',
       'katex',
     ],
-    // Next.js 14에서 serverExternalPackages 대신 experimental 키를 사용
-    serverComponentsExternalPackages: ['@supabase/supabase-js'],
+    serverComponentsExternalPackages: ['@supabase/supabase-js', 'crypto'],
   },
 
   // HTTP/2 서버 푸시 힌트

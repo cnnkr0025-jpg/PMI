@@ -214,7 +214,15 @@ export const Checkout: React.FC = React.memo(() => {
     setShowConfirmModal(false);
     setIsProcessing(true);
     try {
-      await startTossPayment('CARD');
+      // 임시 결제 모드: 실결제 없이 준비된 주문을 바로 성공 페이지로 전달
+      const preparedOrder = await prepareSecurePayment();
+      const searchParams = new URLSearchParams({
+        paymentKey: `mock_${preparedOrder.orderId}`,
+        orderId: preparedOrder.orderId,
+        amount: String(preparedOrder.amount),
+        isMockPayment: '1',
+      });
+      router.push(`/checkout/success?${searchParams.toString()}`);
     } catch {
       setIsProcessing(false);
     }

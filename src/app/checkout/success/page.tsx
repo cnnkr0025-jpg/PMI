@@ -19,6 +19,7 @@ export default function CheckoutSuccessPage() {
       const paymentKey = params.get('paymentKey');
       const amount = params.get('amount');
       const orderId = params.get('orderId');
+      const isMockPayment = params.get('isMockPayment') === '1';
       const raw = localStorage.getItem('pending_purchase');
       const pendingOrder = raw ? JSON.parse(raw) as { orderId?: string; orderToken?: string } : null;
 
@@ -27,7 +28,7 @@ export default function CheckoutSuccessPage() {
           const res = await csrfFetch('/api/payments/toss/confirm', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ paymentKey, orderId, amount: Number(amount), orderToken: pendingOrder.orderToken })
+            body: JSON.stringify({ paymentKey, orderId, amount: Number(amount), orderToken: pendingOrder.orderToken, isMockPayment })
           });
           if (!res.ok) {
             const err = await res.json();

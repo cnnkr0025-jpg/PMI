@@ -35,8 +35,13 @@ export async function POST(req: NextRequest) {
     const orderId = typeof body?.orderId === 'string' ? body.orderId : '';
     const orderToken = typeof body?.orderToken === 'string' ? body.orderToken : '';
     const requestAmount = Number(body?.amount || 0);
+    const isMockPayment = body?.isMockPayment === true || body?.isMockPayment === '1';
 
-    if (!paymentKey || !orderId || !orderToken || !Number.isFinite(requestAmount) || requestAmount <= 0) {
+    if (!orderId || !orderToken || !Number.isFinite(requestAmount) || requestAmount <= 0) {
+      return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
+    }
+
+    if (!isMockPayment && !paymentKey) {
       return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
     }
 
@@ -45,26 +50,37 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'ERR_ORDER', reason: '주문 검증에 실패했습니다.' }, { status: 403 });
     }
 
-    const secretKey = process.env.TOSS_SECRET_KEY;
-    if (!secretKey) {
-      return NextResponse.json({ error: 'Server payment key not configured' }, { status: 500 });
-    }
+    let data: any;
+    if (isMockPayment) {
+      data = {
+        method: 'MOCK',
+        status: 'DONE',
+        orderId,
+        totalAmount: signedOrder.amount,
+        approvedAt: new Date().toISOString(),
+      };
+    } else {
+      const secretKey = process.env.TOSS_SECRET_KEY;
+      if (!secretKey) {
+        return NextResponse.json({ error: 'Server payment key not configured' }, { status: 500 });
+      }
 
-    const basicToken = Buffer.from(`${secretKey}:`).toString('base64');
+      const basicToken = Buffer.from(`${secretKey}:`).toString('base64');
 
-    const response = await fetch('https://api.tosspayments.com/v1/payments/confirm', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Basic ${basicToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ paymentKey, orderId, amount: signedOrder.amount }),
-    });
+      const response = await fetch('https://api.tosspayments.com/v1/payments/confirm', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Basic ${basicToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ paymentKey, orderId, amount: signedOrder.amount }),
+      });
 
-    const data = await response.json();
+      data = await response.json();
 
-    if (!response.ok) {
-      return NextResponse.json({ error: data?.message || 'Payment confirm failed' }, { status: 400 });
+      if (!response.ok) {
+        return NextResponse.json({ error: data?.message || 'Payment confirm failed' }, { status: 400 });
+      }
     }
 
     const db = getDb();
