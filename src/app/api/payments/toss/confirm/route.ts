@@ -79,7 +79,11 @@ export async function POST(req: NextRequest) {
       data = await response.json();
 
       if (!response.ok) {
-        return NextResponse.json({ error: data?.message || 'Payment confirm failed' }, { status: 400 });
+        // 토스 원문 메시지는 서버 로그에만, 클라이언트에는 고정 메시지
+        if (process.env.NODE_ENV !== 'production') {
+          console.error('[toss/confirm] Toss API error:', data?.code, data?.message);
+        }
+        return NextResponse.json({ error: '결제 승인에 실패했습니다. 잠시 후 다시 시도해주세요.' }, { status: 400 });
       }
     }
 
@@ -177,7 +181,10 @@ export async function POST(req: NextRequest) {
       }, { onConflict: 'user_id' });
 
     return setNoStoreHeaders(NextResponse.json({ ok: true, data, walletCredits: mergedCredits, settings: { ...settings, pmcBalance: nextPmcBalance } }));
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'Unexpected error' }, { status: 500 });
+  } catch (e: unknown) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('[toss/confirm] Unexpected error:', e);
+    }
+    return NextResponse.json({ error: '서버 오류가 발생했습니다.' }, { status: 500 });
   }
 }

@@ -58,10 +58,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '요청이 너무 많습니다.' }, { status: 429 });
     }
 
-    const { sessionId, title, messages, isStarred } = await request.json();
+    const body = await request.json().catch(() => null);
+    if (!body) {
+      return NextResponse.json({ error: '요청 형식이 올바르지 않습니다.' }, { status: 400 });
+    }
+    const { sessionId, title, messages, isStarred } = body;
 
     if (!sessionId || typeof sessionId !== 'string' || !title || typeof title !== 'string' || !messages) {
       return NextResponse.json({ error: '필수 파라미터가 누락되었습니다.' }, { status: 400 });
+    }
+
+    // 메시지 크기 제한 (DoS 방지)
+    if (Array.isArray(messages) && messages.length > 2000) {
+      return NextResponse.json({ error: '메시지 수가 너무 많습니다.' }, { status: 400 });
     }
 
     // 입력 길이 제한
@@ -114,7 +123,8 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: '요청이 너무 많습니다.' }, { status: 429 });
     }
 
-    const { sessionId } = await request.json();
+    const body = await request.json().catch(() => null);
+    const { sessionId } = body || {};
 
     if (!sessionId || typeof sessionId !== 'string' || sessionId.length > 200) {
       return NextResponse.json({ error: 'sessionId가 유효하지 않습니다.' }, { status: 400 });

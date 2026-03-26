@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { isAuthorizedAdminRequest } from '@/lib/adminAuth';
+import { logError } from '@/lib/apiError';
 
 // 모든 유저와 크레딧 정보 조회
 export async function GET(request: NextRequest) {
@@ -26,14 +27,14 @@ export async function GET(request: NextRequest) {
       .order('created_at', { ascending: false });
 
     if (error) {
-      console.error('Supabase error:', error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      logError('admin/users GET', error);
+      return NextResponse.json({ error: '사용자 목록을 불러오는데 실패했습니다.' }, { status: 500 });
     }
 
     return NextResponse.json({ users });
-  } catch (error: any) {
-    console.error('Error fetching users:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    logError('admin/users GET', error);
+    return NextResponse.json({ error: '서버 오류가 발생했습니다.' }, { status: 500 });
   }
 }
 
@@ -63,13 +64,13 @@ export async function PATCH(request: NextRequest) {
       .select();
 
     if (error) {
-      console.error('Supabase error:', error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      logError('admin/users PATCH', error);
+      return NextResponse.json({ error: '크레딧 업데이트에 실패했습니다.' }, { status: 500 });
     }
 
     return NextResponse.json({ success: true, data });
-  } catch (error: any) {
-    console.error('Error updating credits:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    logError('admin/users PATCH', error);
+    return NextResponse.json({ error: '서버 오류가 발생했습니다.' }, { status: 500 });
   }
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifySession } from '@/lib/apiAuth';
 import { RateLimiter } from '@/lib/rateLimit';
+import { logError } from '@/lib/apiError';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -19,7 +20,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'ERR_RATE', reason: '요청이 너무 많습니다.' }, { status: 429 });
     }
 
-    const { question, models, speechLevel, language, premium } = await req.json();
+    const body = await req.json().catch(() => null);
+    if (!body) {
+      return NextResponse.json({ error: '요청 형식이 올바르지 않습니다.' }, { status: 400 });
+    }
+    const { question, models, speechLevel, language, premium } = body;
 
     if (!question?.trim()) {
       return NextResponse.json({ error: '질문이 없습니다.' }, { status: 400 });
@@ -69,15 +74,21 @@ export async function POST(req: NextRequest) {
     });
 
     if (!response.ok) {
-      const err = await response.text();
-      return NextResponse.json({ error: `OpenAI 오류: ${err}` }, { status: 500 });
+      // 업스트림 에러 원문은 서버 로그에만 기록, 클라이언트에는 일반 메시지
+      const errText = await response.text().catch(() => '');
+      logError('smart-router/openai', `status=${response.status} body=${errText}`);
+      return NextResponse.json({ error: 'AI 서비스를 일시적으로 사용할 수 없습니다.' }, { status: 502 });
     }
 
-    const data = await response.json();
+    const data = await response.json().catch(() => null);
+    if (!data) {
+      return NextResponse.json({ error: 'AI 서비스 응답이 올바르지 않습니다.' }, { status: 502 });
+    }
     const recommendation = data.choices?.[0]?.message?.content?.trim() || '추천을 가져올 수 없습니다.';
 
     return NextResponse.json({ recommendation });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message || '오류가 발생했습니다.' }, { status: 500 });
+  } catch (error) {
+    logError('smart-router', error);
+    return NextResponse.json({ error: '서버 오류가 발생했습니다.' }, { status: 500 });
   }
 }

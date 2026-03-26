@@ -14,7 +14,8 @@ function getClientIp(request: NextRequest): string {
   return (
     request.headers.get('cf-connecting-ip') ||
     request.headers.get('x-real-ip') ||
-    request.headers.get('x-forwarded-for')?.split(',')[0].trim() ||
+    // optional chaining을 [0]까지 연장 — x-forwarded-for가 null일 때 TypeError 방지
+    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
     'unknown'
   );
 }

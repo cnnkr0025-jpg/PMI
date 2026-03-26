@@ -3,6 +3,7 @@ import { Inter } from 'next/font/google';
 import dynamic from 'next/dynamic';
 import { Toaster } from 'sonner';
 import { ThemeProvider } from '@/components/ThemeProvider';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import './globals.css';
 
 // Header: ssr=false → 서버에서 인증상태 불일치로 생기는 auth-flash 완전 제거
@@ -122,7 +123,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <SessionInitializer />
           <ServiceWorkerRegistrar />
           <Header />
-          {children}
+          <ErrorBoundary>
+            {children}
+          </ErrorBoundary>
           <Toaster
             position="bottom-center"
             closeButton

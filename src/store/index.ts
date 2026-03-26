@@ -65,6 +65,29 @@ const flushPendingPersistWrites = () => {
     try {
       storage.setItem(key, value);
       persistedValueCache.set(key, value);
+    } catch (storageErr: unknown) {
+      // QuotaExceededError: localStorage 용량 초과 — 앱 크래시 방지
+      const isQuotaError =
+        storageErr instanceof DOMException &&
+        (storageErr.name === 'QuotaExceededError' || storageErr.name === 'NS_ERROR_DOM_QUOTA_REACHED');
+      if (isQuotaError) {
+        if (process.env.NODE_ENV !== 'production') {
+          console.warn('[store] localStorage quota exceeded — skipping persist write for:', key);
+        }
+        // 오래된 항목 정리 후 재시도
+        try {
+          const keysToRemove = Object.keys(storage).filter((k) => k.startsWith('pick-my-ai-') && k !== key);
+          if (keysToRemove.length > 0) {
+            storage.removeItem(keysToRemove[0]);
+            storage.setItem(key, value);
+            persistedValueCache.set(key, value);
+          }
+        } catch {
+          // 재시도도 실패하면 무시
+        }
+      } else if (process.env.NODE_ENV !== 'production') {
+        console.error('[store] localStorage write error:', storageErr);
+      }
     } finally {
       recordChatPerfLsSetItem(key, value, performance.now() - start);
     }

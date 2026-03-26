@@ -26,21 +26,27 @@ export const subscribeToWalletUpdates = (userId: string) => {
         filter: `user_id=eq.${userId}`,
       },
       (payload) => {
-        if (process.env.NODE_ENV !== 'production') {
-          console.log('💰 Wallet update received:', payload);
-        }
+        try {
+          if (process.env.NODE_ENV !== 'production') {
+            console.log('💰 Wallet update received:', payload);
+          }
 
-        if (payload.eventType === 'UPDATE' || payload.eventType === 'INSERT') {
-          const newData = payload.new as any;
-          const currentState = useStore.getState();
-          
-          if (newData.credits && currentState.wallet) {
-            useStore.setState({
-              wallet: {
-                ...currentState.wallet,
-                credits: newData.credits,
-              },
-            });
+          if (payload.eventType === 'UPDATE' || payload.eventType === 'INSERT') {
+            const newData = payload.new as any;
+            const currentState = useStore.getState();
+            
+            if (newData?.credits && currentState.wallet) {
+              useStore.setState({
+                wallet: {
+                  ...currentState.wallet,
+                  credits: newData.credits,
+                },
+              });
+            }
+          }
+        } catch (e) {
+          if (process.env.NODE_ENV !== 'production') {
+            console.error('[realtimeSync] Wallet callback error:', e);
           }
         }
       }
@@ -48,6 +54,10 @@ export const subscribeToWalletUpdates = (userId: string) => {
     .subscribe((status) => {
       if (process.env.NODE_ENV !== 'production') {
         console.log('💰 Wallet subscription status:', status);
+      }
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        // 재연결: 5초 후 재시도
+        setTimeout(() => subscribeToWalletUpdates(userId), 5000);
       }
     });
 };
@@ -73,36 +83,44 @@ export const subscribeToTransactionUpdates = (userId: string) => {
         filter: `user_id=eq.${userId}`,
       },
       (payload) => {
-        if (process.env.NODE_ENV !== 'production') {
-          console.log('📊 Transaction update received:', payload);
-        }
+        try {
+          if (process.env.NODE_ENV !== 'production') {
+            console.log('📊 Transaction update received:', payload);
+          }
 
-        const newTransaction = payload.new as any;
-        const currentState = useStore.getState();
-        
-        if (currentState.wallet) {
-          const existingTransaction = currentState.wallet.transactions?.find(
-            (t) => t.id === newTransaction.id
-          );
+          const newTransaction = payload.new as any;
+          if (!newTransaction?.id) return;
 
-          if (!existingTransaction) {
-            useStore.setState({
-              wallet: {
-                ...currentState.wallet,
-                transactions: [
-                  ...(currentState.wallet.transactions || []),
-                  {
-                    id: newTransaction.id,
-                    userId: newTransaction.user_id || currentState.wallet.userId,
-                    type: newTransaction.type,
-                    modelId: newTransaction.model_id,
-                    amount: newTransaction.amount,
-                    timestamp: newTransaction.created_at,
-                    description: newTransaction.description,
-                  },
-                ],
-              },
-            });
+          const currentState = useStore.getState();
+          
+          if (currentState.wallet) {
+            const existingTransaction = currentState.wallet.transactions?.find(
+              (t) => t.id === newTransaction.id
+            );
+
+            if (!existingTransaction) {
+              useStore.setState({
+                wallet: {
+                  ...currentState.wallet,
+                  transactions: [
+                    ...(currentState.wallet.transactions || []),
+                    {
+                      id: newTransaction.id,
+                      userId: newTransaction.user_id || currentState.wallet.userId,
+                      type: newTransaction.type,
+                      modelId: newTransaction.model_id,
+                      amount: newTransaction.amount,
+                      timestamp: newTransaction.created_at,
+                      description: newTransaction.description,
+                    },
+                  ],
+                },
+              });
+            }
+          }
+        } catch (e) {
+          if (process.env.NODE_ENV !== 'production') {
+            console.error('[realtimeSync] Transaction callback error:', e);
           }
         }
       }
@@ -110,6 +128,9 @@ export const subscribeToTransactionUpdates = (userId: string) => {
     .subscribe((status) => {
       if (process.env.NODE_ENV !== 'production') {
         console.log('📊 Transactions subscription status:', status);
+      }
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        setTimeout(() => subscribeToTransactionUpdates(userId), 5000);
       }
     });
 };

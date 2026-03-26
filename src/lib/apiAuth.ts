@@ -20,17 +20,18 @@ export async function verifyAuth(request: NextRequest): Promise<{
 
     const token = authHeader.substring(7);
 
-    if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
-      const { data: { user }, error } = await supabase.auth.getUser(token);
-
-      if (error || !user) {
-        return { authenticated: false, error: '유효하지 않은 토큰입니다.' };
-      }
-
-      return { authenticated: true, userId: user.id };
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      // Supabase URL 미설정 → Bearer 토큰만 있어도 통과하는 보안 우회 방지
+      return { authenticated: false, error: '인증 서비스를 사용할 수 없습니다.' };
     }
 
-    return { authenticated: true };
+    const { data: { user }, error } = await supabase.auth.getUser(token);
+
+    if (error || !user) {
+      return { authenticated: false, error: '유효하지 않은 토큰입니다.' };
+    }
+
+    return { authenticated: true, userId: user.id };
   } catch (error) {
     return { authenticated: false, error: '인증 처리 중 오류가 발생했습니다.' };
   }

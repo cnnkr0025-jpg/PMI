@@ -144,9 +144,16 @@ export async function PATCH(request: NextRequest) {
       if (merged[key] <= 0) delete merged[key];
     }
 
-    await db
+    const { error: upsertError } = await db
       .from('user_wallets')
       .upsert({ user_id: userId, credits: merged, updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
+
+    if (upsertError) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.error('Wallet upsert error:', upsertError.message);
+      }
+      return NextResponse.json({ error: '지갑 업데이트에 실패했습니다.' }, { status: 500 });
+    }
 
     return NextResponse.json({ ok: true, credits: merged });
   } catch (error: any) {
