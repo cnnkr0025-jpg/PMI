@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { verifySession } from '@/lib/apiAuth';
+import { RateLimiter } from '@/lib/rateLimit';
+
+const userDataReadLimiter = new RateLimiter(30, 60 * 1000); // 분당 30회
+const userDataWriteLimiter = new RateLimiter(20, 60 * 1000); // 분당 20회
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -31,6 +35,12 @@ export async function GET(request: NextRequest) {
     }
 
     const userId = session.userId;
+
+    const rl = userDataReadLimiter.check(userId);
+    if (!rl.success) {
+      return NextResponse.json({ error: '요청이 너무 많습니다.' }, { status: 429 });
+    }
+
     const db = getSupabaseAdmin();
 
     // 지갑 로드
@@ -65,7 +75,7 @@ export async function GET(request: NextRequest) {
     if (process.env.NODE_ENV !== 'production') {
       console.error('user-data GET error:', error);
     }
-    return NextResponse.json({ error: (error as any)?.message || '서버 오류' }, { status: 500 });
+    return NextResponse.json({ error: '서버 오류가 발생했습니다.' }, { status: 500 });
   }
 }
 
@@ -81,6 +91,12 @@ export async function POST(request: NextRequest) {
     }
 
     const userId = session.userId;
+
+    const rl = userDataWriteLimiter.check(userId);
+    if (!rl.success) {
+      return NextResponse.json({ error: '요청이 너무 많습니다.' }, { status: 429 });
+    }
+
     const body = await request.json();
     const db = getSupabaseAdmin();
 
@@ -117,6 +133,6 @@ export async function POST(request: NextRequest) {
     if (process.env.NODE_ENV !== 'production') {
       console.error('user-data POST error:', error);
     }
-    return NextResponse.json({ error: (error as any)?.message || '서버 오류' }, { status: 500 });
+    return NextResponse.json({ error: '서버 오류가 발생했습니다.' }, { status: 500 });
   }
 }

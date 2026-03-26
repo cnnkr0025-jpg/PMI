@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { verifySession } from '@/lib/apiAuth';
+import { RateLimiter } from '@/lib/rateLimit';
+
+const sessionReadLimiter = new RateLimiter(60, 60 * 1000); // 분당 60회
+const sessionWriteLimiter = new RateLimiter(30, 60 * 1000); // 분당 30회
 
 export async function GET(request: NextRequest) {
   try {
@@ -12,6 +16,11 @@ export async function GET(request: NextRequest) {
     
     const userId = sessionResult.userId;
 
+    const rl = sessionReadLimiter.check(userId);
+    if (!rl.success) {
+      return NextResponse.json({ error: '요청이 너무 많습니다.' }, { status: 429 });
+    }
+
     const { data: sessions, error } = await supabaseAdmin
       .from('chat_sessions')
       .select('*')
@@ -19,19 +28,18 @@ export async function GET(request: NextRequest) {
       .order('updated_at', { ascending: false });
 
     if (error) {
-      console.error('Chat sessions fetch error:', {
-        message: error.message,
-        details: error.details,
-        hint: error.hint,
-        code: error.code
-      });
-      return NextResponse.json({ error: '채팅 세션을 불러오는데 실패했습니다.', code: error.code, hint: error.hint }, { status: 500 });
+      if (process.env.NODE_ENV !== 'production') {
+        console.error('Chat sessions fetch error:', error.message, error.code);
+      }
+      return NextResponse.json({ error: '채팅 세션을 불러오는데 실패했습니다.' }, { status: 500 });
     }
 
     return NextResponse.json({ sessions: sessions || [] });
   } catch (error: any) {
-    console.error('Chat sessions API error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('Chat sessions API error:', error);
+    }
+    return NextResponse.json({ error: '서버 오류가 발생했습니다.' }, { status: 500 });
   }
 }
 
@@ -45,10 +53,20 @@ export async function POST(request: NextRequest) {
     
     const userId = sessionResult.userId;
 
+    const rl = sessionWriteLimiter.check(userId);
+    if (!rl.success) {
+      return NextResponse.json({ error: '요청이 너무 많습니다.' }, { status: 429 });
+    }
+
     const { sessionId, title, messages, isStarred } = await request.json();
 
-    if (!sessionId || !title || !messages) {
+    if (!sessionId || typeof sessionId !== 'string' || !title || typeof title !== 'string' || !messages) {
       return NextResponse.json({ error: '필수 파라미터가 누락되었습니다.' }, { status: 400 });
+    }
+
+    // 입력 길이 제한
+    if (sessionId.length > 200 || title.length > 500) {
+      return NextResponse.json({ error: '입력값이 너무 깁니다.' }, { status: 400 });
     }
 
     const { data, error } = await supabaseAdmin
@@ -56,7 +74,7 @@ export async function POST(request: NextRequest) {
       .upsert({
         user_id: userId,
         session_id: sessionId,
-        title,
+        title: title.slice(0, 500),
         messages,
         is_starred: Boolean(isStarred),
         updated_at: new Date().toISOString()
@@ -66,19 +84,18 @@ export async function POST(request: NextRequest) {
       .select();
 
     if (error) {
-      console.error('Chat session save error:', {
-        message: error.message,
-        details: error.details,
-        hint: error.hint,
-        code: error.code
-      });
-      return NextResponse.json({ error: '채팅 세션 저장에 실패했습니다.', code: error.code, hint: error.hint }, { status: 500 });
+      if (process.env.NODE_ENV !== 'production') {
+        console.error('Chat session save error:', error.message, error.code);
+      }
+      return NextResponse.json({ error: '채팅 세션 저장에 실패했습니다.' }, { status: 500 });
     }
 
     return NextResponse.json({ success: true, session: data?.[0] });
   } catch (error: any) {
-    console.error('Chat sessions API error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('Chat sessions API error:', error);
+    }
+    return NextResponse.json({ error: '서버 오류가 발생했습니다.' }, { status: 500 });
   }
 }
 
@@ -92,10 +109,15 @@ export async function DELETE(request: NextRequest) {
     
     const userId = sessionResult.userId;
 
+    const rl = sessionWriteLimiter.check(userId);
+    if (!rl.success) {
+      return NextResponse.json({ error: '요청이 너무 많습니다.' }, { status: 429 });
+    }
+
     const { sessionId } = await request.json();
 
-    if (!sessionId) {
-      return NextResponse.json({ error: 'sessionId가 필요합니다.' }, { status: 400 });
+    if (!sessionId || typeof sessionId !== 'string' || sessionId.length > 200) {
+      return NextResponse.json({ error: 'sessionId가 유효하지 않습니다.' }, { status: 400 });
     }
 
     const { error } = await supabaseAdmin
@@ -105,18 +127,17 @@ export async function DELETE(request: NextRequest) {
       .eq('session_id', sessionId);
 
     if (error) {
-      console.error('Chat session delete error:', {
-        message: error.message,
-        details: error.details,
-        hint: error.hint,
-        code: error.code
-      });
-      return NextResponse.json({ error: '채팅 세션 삭제에 실패했습니다.', code: error.code, hint: error.hint }, { status: 500 });
+      if (process.env.NODE_ENV !== 'production') {
+        console.error('Chat session delete error:', error.message, error.code);
+      }
+      return NextResponse.json({ error: '채팅 세션 삭제에 실패했습니다.' }, { status: 500 });
     }
 
     return NextResponse.json({ success: true });
   } catch (error: any) {
-    console.error('Chat sessions API error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('Chat sessions API error:', error);
+    }
+    return NextResponse.json({ error: '서버 오류가 발생했습니다.' }, { status: 500 });
   }
 }

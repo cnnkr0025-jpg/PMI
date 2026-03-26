@@ -57,7 +57,7 @@ export function withAuth(
 }
 
 /**
- * CSRF 토큰 검증
+ * CSRF 토큰 검증 (타이밍 안전 비교)
  */
 export function verifyCsrfToken(request: NextRequest): boolean {
   const csrfToken = request.headers.get('x-csrf-token');
@@ -67,7 +67,16 @@ export function verifyCsrfToken(request: NextRequest): boolean {
     return false;
   }
 
-  return csrfToken === cookieToken;
+  // 고정 길이 패딩 후 상수 시간 비교 (타이밍 사이드채널 방지)
+  const EXPECTED_LEN = 64;
+  const cv = cookieToken.padEnd(EXPECTED_LEN, '\0').slice(0, EXPECTED_LEN);
+  const hv = csrfToken.padEnd(EXPECTED_LEN, '\0').slice(0, EXPECTED_LEN);
+  let mismatch = cookieToken.length !== EXPECTED_LEN ? 1 : 0;
+  mismatch |= csrfToken.length !== EXPECTED_LEN ? 1 : 0;
+  for (let i = 0; i < EXPECTED_LEN; i++) {
+    mismatch |= cv.charCodeAt(i) ^ hv.charCodeAt(i);
+  }
+  return mismatch === 0;
 }
 
 /**
@@ -109,11 +118,17 @@ export async function verifySession(request: NextRequest): Promise<{
     const sessionToken = request.cookies.get(SESSION_COOKIE_NAME)?.value;
 
     if (!sessionToken) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn('[verifySession] No session token found');
+      }
       return { authenticated: false, error: '세션 토큰이 없습니다.' };
     }
 
     const verification = await verifySecureToken(sessionToken);
     if (!verification.valid || !verification.payload) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn('[verifySession] Token verification failed:', verification.error);
+      }
       return {
         authenticated: false,
         error: verification.error || '세션 검증 실패',
@@ -127,6 +142,9 @@ export async function verifySession(request: NextRequest): Promise<{
       name: verification.payload.name,
     };
   } catch (error: any) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('[verifySession] Unexpected error:', error);
+    }
     return {
       authenticated: false,
       error: error?.message || '세션 검증 실패',

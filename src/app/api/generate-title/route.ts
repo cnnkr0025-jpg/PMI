@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { verifySession } from '@/lib/apiAuth';
+import { RateLimiter } from '@/lib/rateLimit';
 
 const GEMINI_API_KEYS = [
   process.env.GEMINI_API_KEY_1,
@@ -8,13 +10,35 @@ const GEMINI_API_KEYS = [
 
 let currentKeyIndex = 0;
 
+const titleRateLimiter = new RateLimiter(30, 60 * 1000); // 분당 30회
+
 export async function POST(req: NextRequest) {
   try {
+    // 인증 검증 (미인증 사용자의 API 키 소모 방지)
+    const session = await verifySession(req);
+    if (!session.authenticated || !session.userId) {
+      return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 });
+    }
+
+    // Rate Limit (사용자 ID 기반)
+    const rl = titleRateLimiter.check(session.userId);
+    if (!rl.success) {
+      return NextResponse.json({ error: '요청이 너무 많습니다.' }, { status: 429 });
+    }
+
     const { message } = await req.json();
 
     if (!message || typeof message !== 'string') {
       return NextResponse.json(
         { error: '메시지가 필요합니다.' },
+        { status: 400 }
+      );
+    }
+
+    // 입력 길이 제한 (과도한 토큰 소비 방지)
+    if (message.length > 5000) {
+      return NextResponse.json(
+        { error: '메시지가 너무 깁니다.' },
         { status: 400 }
       );
     }

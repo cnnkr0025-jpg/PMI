@@ -90,16 +90,20 @@ const nextConfig = {
         ],
       },
       {
-        // API 응답 캐시 방지 (항상 최신)
+        // API 응답 캐시 방지 + 보안 헤더 이중 적용
         source: '/api/:path*',
         headers: [
           { key: 'Cache-Control', value: 'no-store, no-cache, must-revalidate' },
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'X-Frame-Options', value: 'DENY' },
+          { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
+          { key: 'Cross-Origin-Resource-Policy', value: 'same-origin' },
         ],
       },
       {
         source: '/:path*',
         headers: [
-          { key: 'X-DNS-Prefetch-Control', value: 'on' },
+          { key: 'X-DNS-Prefetch-Control', value: 'off' },
           {
             key: 'Strict-Transport-Security',
             value: 'max-age=63072000; includeSubDomains; preload',
@@ -114,13 +118,17 @@ const nextConfig = {
           {
             key: 'Permissions-Policy',
             value:
-              'camera=(), microphone=(), geolocation=(), interest-cohort=()',
+              'camera=(), microphone=(), geolocation=(), interest-cohort=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=()',
           },
+          { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
+          { key: 'Cross-Origin-Resource-Policy', value: 'same-origin' },
+          { key: 'X-Download-Options', value: 'noopen' },
+          { key: 'X-Permitted-Cross-Domain-Policies', value: 'none' },
           {
             key: 'Content-Security-Policy',
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://www.google.com https://www.gstatic.com https://js.toss.im",
+              "script-src 'self' 'unsafe-inline' https://www.google.com https://www.gstatic.com https://js.toss.im",
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: https: blob:",
               "font-src 'self' data:",

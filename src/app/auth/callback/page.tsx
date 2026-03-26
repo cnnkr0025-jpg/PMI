@@ -91,25 +91,28 @@ async function handleCallback() {
 
       // PKCE 표준 경로: Supabase SDK가 저장한 code_verifier를 사용해 세션 교환
       const { data: exchangeData, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
-      const accessToken = exchangeData.session?.access_token || await readClientSessionAccessToken();
+      
+      if (exchangeError) {
+        console.error('[auth/callback] PKCE exchange error:', exchangeError.message);
+      }
+      
+      const accessToken = exchangeData?.session?.access_token || await readClientSessionAccessToken();
 
-      if (!exchangeError || accessToken) {
-        if (accessToken) {
-          const ok = await callSocialSessionAPI(accessToken);
-          if (ok) {
-            console.log('[auth/callback] PKCE exchange successful, redirecting to /chat');
-            window.location.replace('/chat');
-            return;
-          }
-          console.error('[auth/callback] Session cookie setup failed after PKCE exchange');
-          window.location.replace('/login?error=cookie_failed');
+      if (accessToken) {
+        console.log('[auth/callback] Access token obtained, setting session cookie...');
+        const ok = await callSocialSessionAPI(accessToken);
+        if (ok) {
+          console.log('[auth/callback] PKCE exchange successful, redirecting to /chat');
+          window.location.replace('/chat');
           return;
         }
+        console.error('[auth/callback] Session cookie setup failed after PKCE exchange');
       }
 
       // 일부 환경 fallback: 서버 code 교환 경로 시도
-      console.warn('[auth/callback] PKCE exchange failed, trying server fallback...', exchangeError?.message);
-      const ok = await callCodeExchangeAPI(code, readStoredCodeVerifier());
+      console.log('[auth/callback] Trying server-side code exchange fallback...');
+      const codeVerifier = readStoredCodeVerifier();
+      const ok = await callCodeExchangeAPI(code, codeVerifier);
       if (ok) {
         console.log('[auth/callback] Server fallback exchange successful, redirecting to /chat');
         window.location.replace('/chat');
@@ -186,7 +189,7 @@ async function callSocialSessionAPI(accessToken: string): Promise<boolean> {
 }
 
 async function confirmServerSession(): Promise<boolean> {
-  for (let i = 0; i < 4; i += 1) {
+  for (let i = 0; i < 5; i += 1) {
     try {
       const res = await fetch('/api/auth/session', {
         method: 'GET',
@@ -196,16 +199,20 @@ async function confirmServerSession(): Promise<boolean> {
       if (res.ok) {
         const data = await res.json().catch(() => ({}));
         if (data?.authenticated) {
+          console.log('[auth/callback] Server session confirmed');
           return true;
         }
       }
-    } catch {
-      // ignore
+    } catch (err) {
+      console.warn('[auth/callback] Session check attempt', i + 1, 'failed:', err);
     }
 
-    await new Promise((resolve) => setTimeout(resolve, 120));
+    if (i < 4) {
+      await new Promise((resolve) => setTimeout(resolve, 150));
+    }
   }
 
+  console.error('[auth/callback] Failed to confirm server session after 5 attempts');
   return false;
 }
 

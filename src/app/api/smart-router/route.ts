@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifySession } from '@/lib/apiAuth';
+import { RateLimiter } from '@/lib/rateLimit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+
+const smartRouterLimiter = new RateLimiter(15, 60 * 1000); // 분당 15회
 
 export async function POST(req: NextRequest) {
   try {
@@ -11,10 +14,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'ERR_AUTH', reason: '로그인이 필요합니다.' }, { status: 401 });
     }
 
+    const rl = smartRouterLimiter.check(session.userId);
+    if (!rl.success) {
+      return NextResponse.json({ error: 'ERR_RATE', reason: '요청이 너무 많습니다.' }, { status: 429 });
+    }
+
     const { question, models, speechLevel, language, premium } = await req.json();
 
     if (!question?.trim()) {
       return NextResponse.json({ error: '질문이 없습니다.' }, { status: 400 });
+    }
+
+    // 입력 길이 제한 (과도한 토큰 소비 방지)
+    if (typeof question === 'string' && question.length > 5000) {
+      return NextResponse.json({ error: '질문이 너무 깁니다.' }, { status: 400 });
     }
 
     const apiKey = process.env.OPENAI_API_KEY;

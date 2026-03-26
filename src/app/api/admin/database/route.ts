@@ -52,20 +52,23 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: '허용되지 않은 작업입니다.' }, { status: 403 });
     }
   } catch (error: any) {
-    console.error('Database admin error:', error);
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('Database admin error:', error);
+    }
     return NextResponse.json({ 
-      error: error.message || '데이터베이스 작업 중 오류가 발생했습니다.' 
+      error: '데이터베이스 작업 중 오류가 발생했습니다.' 
     }, { status: 500 });
   }
 }
 
-// 테이블 스키마 조회
+// 테이블 스키마 조회 — 프로덕션에서 완전 차단
 export async function GET(request: NextRequest) {
-  try {
-    if (process.env.NODE_ENV === 'production') {
-      return NextResponse.json({ error: '비활성화된 기능입니다.' }, { status: 403 });
-    }
+  // 보안 강화: 스키마 조회는 프로덕션에서 무조건 비활성화
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json({ error: '비활성화된 기능입니다.' }, { status: 403 });
+  }
 
+  try {
     if (!(await isAuthorizedAdminRequest(request))) {
       return NextResponse.json({ error: '관리자 권한이 필요합니다.' }, { status: 401 });
     }
@@ -73,13 +76,18 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const table = searchParams.get('table');
 
-    if (!table) {
+    if (!table || typeof table !== 'string') {
       return NextResponse.json({ error: 'table 파라미터가 필요합니다.' }, { status: 400 });
+    }
+
+    // 허용된 테이블 이름만 허용 (SQL Injection 방지)
+    const ALLOWED_TABLES = new Set(['users', 'user_wallets', 'user_settings', 'chat_sessions', 'transactions', 'batch_requests']);
+    if (!ALLOWED_TABLES.has(table)) {
+      return NextResponse.json({ error: '허용되지 않은 테이블입니다.' }, { status: 403 });
     }
 
     const adminClient = getAdminSupabase();
     
-    // 테이블 스키마 조회
     const { data, error } = await adminClient
       .from('information_schema.columns')
       .select('column_name, data_type, is_nullable')
@@ -92,7 +100,7 @@ export async function GET(request: NextRequest) {
   } catch (error: any) {
     console.error('Schema query error:', error);
     return NextResponse.json({ 
-      error: error.message || '스키마 조회 중 오류가 발생했습니다.' 
+      error: '스키마 조회 중 오류가 발생했습니다.' 
     }, { status: 500 });
   }
 }

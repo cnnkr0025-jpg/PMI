@@ -178,10 +178,23 @@ export class AuthService {
         });
 
         if (authError) {
+          if (process.env.NODE_ENV !== 'production') {
+            console.error('[AuthService.login] Supabase auth error:', authError.message);
+          }
+          // 사용자 친화적인 에러 메시지
+          if (authError.message.includes('Invalid login credentials')) {
+            return { success: false, error: '이메일 또는 비밀번호가 올바르지 않습니다.' };
+          }
+          if (authError.message.includes('Email not confirmed')) {
+            return { success: false, error: '이메일 인증이 필요합니다. 이메일을 확인해주세요.' };
+          }
           return { success: false, error: authError.message };
         }
 
         if (!authData.user) {
+          if (process.env.NODE_ENV !== 'production') {
+            console.error('[AuthService.login] No user data returned');
+          }
           return { success: false, error: '로그인 실패' };
         }
 
@@ -193,6 +206,9 @@ export class AuthService {
           .single();
 
         if (dbError || !userData) {
+          if (process.env.NODE_ENV !== 'production') {
+            console.error('[AuthService.login] Failed to fetch user data:', dbError?.message);
+          }
           return { success: false, error: '사용자 정보를 찾을 수 없습니다' };
         }
 
@@ -203,13 +219,23 @@ export class AuthService {
           createdAt: new Date(userData.created_at),
         };
 
+        if (process.env.NODE_ENV !== 'production') {
+          console.log('[AuthService.login] Login successful for user:', user.email);
+        }
+
         return { success: true, user };
       } else {
         // Supabase 미설정 시 로컬 fallback
+        if (process.env.NODE_ENV !== 'production') {
+          console.warn('[AuthService.login] Supabase not configured, using fallback');
+        }
         return { success: true };
       }
     } catch (error: any) {
-      return { success: false, error: error.message };
+      if (process.env.NODE_ENV !== 'production') {
+        console.error('[AuthService.login] Unexpected error:', error);
+      }
+      return { success: false, error: error.message || '로그인 중 오류가 발생했습니다.' };
     }
   }
 

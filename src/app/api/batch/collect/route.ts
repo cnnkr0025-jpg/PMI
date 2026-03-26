@@ -16,8 +16,9 @@ function getDb() {
 
 // POST /api/batch/collect  (cron 호출 - 처리 완료된 결과 수집)
 export async function POST(request: NextRequest) {
+  // 보안 강화: CRON_SECRET 필수 — 미설정 시 무조건 거부
   const authHeader = request.headers.get('authorization');
-  if (CRON_SECRET && authHeader !== `Bearer ${CRON_SECRET}`) {
+  if (!CRON_SECRET || authHeader !== `Bearer ${CRON_SECRET}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

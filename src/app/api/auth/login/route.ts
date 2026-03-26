@@ -70,6 +70,9 @@ export async function POST(request: NextRequest) {
     const result = await AuthService.login(email, password);
 
     if (!result.success || !result.user) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.error('[login] Login failed:', result.error);
+      }
       return NextResponse.json(
         { error: result.error || '로그인에 실패했습니다.' },
         { status: 401 }
@@ -82,6 +85,10 @@ export async function POST(request: NextRequest) {
       email: result.user.email,
       name: result.user.name,
     });
+
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[login] Login successful for user:', result.user.email);
+    }
 
     // HttpOnly 쿠키 설정
     const response = NextResponse.json({

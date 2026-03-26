@@ -44,9 +44,9 @@ const OPENAI_MODEL_MAP: Record<string, string> = {
 
 // POST /api/batch/process  (cron 또는 관리자 호출)
 export async function POST(request: NextRequest) {
-  // 보안: cron secret 검증
+  // 보안 강화: CRON_SECRET 필수 — 미설정 시 무조건 거부
   const authHeader = request.headers.get('authorization');
-  if (CRON_SECRET && authHeader !== `Bearer ${CRON_SECRET}`) {
+  if (!CRON_SECRET || authHeader !== `Bearer ${CRON_SECRET}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

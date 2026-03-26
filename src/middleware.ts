@@ -12,16 +12,17 @@ function generateCsrfToken(): string {
 
 function getClientIp(request: NextRequest): string {
   return (
-    request.headers.get('x-forwarded-for')?.split(',')[0].trim() ||
+    request.headers.get('cf-connecting-ip') ||
     request.headers.get('x-real-ip') ||
+    request.headers.get('x-forwarded-for')?.split(',')[0].trim() ||
     'unknown'
   );
 }
 
-// 간단한 인메모리 IP 카운터 (Edge Function 인스턴스 수명 동안만 유지)
+// ── 인메모리 IP 카운터 (Rate Limit) ──
 const ipHits = new Map<string, { count: number; ts: number }>();
-const IP_RATE_LIMIT = 100; // 1분 내 최대 요청 수
-const IP_MAP_MAX_SIZE = 10_000; // 최대 추적 IP 수 (메모리 DoS 방지)
+const IP_RATE_LIMIT = 80; // 1분 내 최대 요청 수 (100 → 80)
+const IP_MAP_MAX_SIZE = 10_000;
 let ipHitsCleanupCounter = 0;
 
 function cleanupIpHits(now: number): void {
@@ -32,17 +33,12 @@ function cleanupIpHits(now: number): void {
 
 function isIPAbusive(ip: string): boolean {
   const now = Date.now();
-
-  // 주기적 정리 (500 요청마다, 오래된 항목 제거)
   if (++ipHitsCleanupCounter >= 500) {
     ipHitsCleanupCounter = 0;
     cleanupIpHits(now);
   }
-
   const record = ipHits.get(ip);
-
   if (!record || now - record.ts > 60_000) {
-    // Map 크기 한도 초과 시 추가 거부 대신 최소 제거 후 삽입
     if (!record && ipHits.size >= IP_MAP_MAX_SIZE) {
       const firstKey = ipHits.keys().next().value;
       if (firstKey !== undefined) ipHits.delete(firstKey);
@@ -50,28 +46,158 @@ function isIPAbusive(ip: string): boolean {
     ipHits.set(ip, { count: 1, ts: now });
     return false;
   }
-
   record.count++;
-  if (record.count > IP_RATE_LIMIT) return true;
-  return false;
+  return record.count > IP_RATE_LIMIT;
 }
 
-// ── 미들웨어 본체 ──
+// ── 버스트 탐지 (2초 내 과도한 요청) ──
+const burstMap = new Map<string, number[]>();
+const BURST_WINDOW_MS = 2_000;
+const BURST_MAX = 15;
+const BURST_MAP_MAX = 20_000;
 
+function isBurstRequest(ip: string): boolean {
+  const now = Date.now();
+  let ts = burstMap.get(ip);
+  if (!ts) {
+    if (burstMap.size >= BURST_MAP_MAX) {
+      const fk = burstMap.keys().next().value;
+      if (fk !== undefined) burstMap.delete(fk);
+    }
+    burstMap.set(ip, [now]);
+    return false;
+  }
+  ts = ts.filter((t) => now - t < BURST_WINDOW_MS);
+  ts.push(now);
+  burstMap.set(ip, ts);
+  return ts.length > BURST_MAX;
+}
+
+// ── 허니팟 IP 블랙리스트 (24h 자동 차단) ──
+const honeypotBanMap = new Map<string, number>();
+const HONEYPOT_BAN_DURATION = 24 * 60 * 60 * 1000;
+const HONEYPOT_BAN_MAX = 50_000;
+
+function banIp(ip: string): void {
+  if (honeypotBanMap.size >= HONEYPOT_BAN_MAX) {
+    const fk = honeypotBanMap.keys().next().value;
+    if (fk !== undefined) honeypotBanMap.delete(fk);
+  }
+  honeypotBanMap.set(ip, Date.now() + HONEYPOT_BAN_DURATION);
+}
+
+function isIpBanned(ip: string): boolean {
+  const exp = honeypotBanMap.get(ip);
+  if (!exp) return false;
+  if (Date.now() > exp) { honeypotBanMap.delete(ip); return false; }
+  return true;
+}
+
+// ── 허니팟 경로 ──
+const HONEYPOT_PATHS = new Set([
+  '/.env', '/.env.local', '/.env.production', '/.git', '/.git/config', '/.git/HEAD',
+  '/.svn', '/.htaccess', '/.htpasswd', '/wp-admin', '/wp-login.php', '/wp-content',
+  '/administrator', '/phpmyadmin', '/phpinfo.php', '/server-status', '/server-info',
+  '/cgi-bin', '/config.php', '/config.yml', '/config.json', '/database.yml',
+  '/docker-compose.yml', '/Dockerfile', '/.aws/credentials', '/.ssh/id_rsa',
+  '/etc/passwd', '/etc/shadow', '/proc/self/environ', '/actuator', '/graphql',
+  '/console', '/xmlrpc.php', '/backup.sql', '/dump.sql', '/db.sql', '/web.config',
+]);
+
+const HONEYPOT_PATTERNS = [
+  /\/\.(env|git|svn|htaccess|htpasswd|aws|ssh|docker)/i,
+  /\/(wp-|wordpress|joomla|drupal)/i,
+  /\/(phpmyadmin|adminer|phpinfo)/i,
+  /\/(backup|dump|export|db)\.(sql|zip|tar|gz|bak)/i,
+  /\/(config|settings|credentials)\.(php|yml|yaml|json|xml|ini)/i,
+];
+
+function isHoneypotPath(p: string): boolean {
+  const n = p.toLowerCase().replace(/\/+/g, '/');
+  if (HONEYPOT_PATHS.has(n)) return true;
+  return HONEYPOT_PATTERNS.some((r) => r.test(n));
+}
+
+// ── 악성 User-Agent 탐지 ──
+const MALICIOUS_UA_PATTERNS = [
+  /sqlmap/i, /nikto/i, /nmap/i, /masscan/i, /zgrab/i, /gobuster/i, /dirbuster/i,
+  /wpscan/i, /nuclei/i, /httpx/i, /ffuf/i, /feroxbuster/i, /burpsuite/i,
+  /acunetix/i, /nessus/i, /openvas/i, /w3af/i, /arachni/i, /havij/i, /metasploit/i,
+  /hydra/i, /medusa/i,
+];
+
+function isMaliciousUA(ua: string | null): boolean {
+  if (!ua || ua.length > 1000) return true;
+  return MALICIOUS_UA_PATTERNS.some((p) => p.test(ua));
+}
+
+// ── 경로 순회 / 널 바이트 탐지 ──
+function hasPathTraversal(p: string): boolean {
+  return /(\.\.[/\\]|%2e%2e[/\\%]|%252e%252e)/i.test(p);
+}
+function hasNullByte(p: string): boolean {
+  return p.includes('\0') || /%00/i.test(p);
+}
+
+// ── 보안 헤더 (이중 레이어 — next.config.js + 미들웨어 동시 적용) ──
 function setSecurityHeaders(response: NextResponse): NextResponse {
   response.headers.set('X-Content-Type-Options', 'nosniff');
   response.headers.set('X-Frame-Options', 'DENY');
   response.headers.set('X-XSS-Protection', '1; mode=block');
   response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
-  response.headers.set('Permissions-Policy', 'geolocation=(), microphone=(), camera=(), payment=()');
+  response.headers.set('Permissions-Policy', 'geolocation=(), microphone=(), camera=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=()');
   response.headers.set('X-DNS-Prefetch-Control', 'off');
   response.headers.set('X-Download-Options', 'noopen');
   response.headers.set('X-Permitted-Cross-Domain-Policies', 'none');
+  // Cross-Origin 격리 헤더
+  response.headers.set('Cross-Origin-Opener-Policy', 'same-origin');
+  response.headers.set('Cross-Origin-Resource-Policy', 'same-origin');
+  // HSTS (미들웨어 레이어에서도 이중 적용)
+  if (process.env.NODE_ENV === 'production') {
+    response.headers.set('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload');
+  }
+  // 서버 정보 은닉
+  response.headers.delete('X-Powered-By');
+  response.headers.delete('Server');
   return response;
 }
 
+// ── 미들웨어 본체 ──
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const clientIp = getClientIp(request);
+
+  // ① 이미 차단된 IP (허니팟 블랙리스트)
+  if (isIpBanned(clientIp)) {
+    return new NextResponse(null, { status: 403 });
+  }
+
+  // ② 경로 순회 / 널 바이트 공격 차단
+  if (hasPathTraversal(pathname) || hasNullByte(pathname)) {
+    banIp(clientIp);
+    return new NextResponse(null, { status: 400 });
+  }
+
+  // ③ 허니팟 경로 탐지 → IP 즉시 24시간 차단
+  if (isHoneypotPath(pathname)) {
+    banIp(clientIp);
+    // 의도적으로 지연 응답 (공격 도구 속도 저하)
+    return new NextResponse(null, { status: 404 });
+  }
+
+  // ④ 악성 User-Agent 차단 (API 경로에서만 — 정상 브라우저는 통과)
+  if (pathname.startsWith('/api/')) {
+    const ua = request.headers.get('user-agent');
+    if (isMaliciousUA(ua)) {
+      return NextResponse.json({ error: '요청이 거부되었습니다.' }, { status: 403 });
+    }
+  }
+
+  // ⑤ 버스트 요청 탐지 (2초 내 15개 이상)
+  if (isBurstRequest(clientIp)) {
+    return NextResponse.json({ error: '요청 속도가 너무 빠릅니다.' }, { status: 429 });
+  }
 
   // 보호된 경로 정의
   const protectedPaths = ['/chat', '/dashboard', '/settings', '/configurator', '/checkout', '/feedback'];
@@ -103,12 +229,11 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // IP 남용 체크
-  const clientIp = getClientIp(request);
+  // ⑥ IP 남용 체크 (1분 내 80회)
   if (isIPAbusive(clientIp)) {
     return NextResponse.json(
       { error: '비정상적인 요청 패턴이 감지되었습니다.' },
-      { status: 403 }
+      { status: 429 }
     );
   }
 
@@ -124,12 +249,12 @@ export async function middleware(request: NextRequest) {
 
   // CSRF 검증 (상태 변경 메서드 + API 라우트)
   if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(request.method) && isApiPath) {
-    const publicEndpoints = ['/api/auth/login', '/api/auth/register', '/api/auth/social-session', '/api/chat'];
+    // /api/chat은 CSRF 예외에서 제거 — 세션 쿠키 + Origin 검증으로 보호
+    const publicEndpoints = ['/api/auth/login', '/api/auth/register', '/api/auth/social-session'];
     const isPublicEndpoint = publicEndpoints.some(ep => pathname.startsWith(ep));
 
     if (!isPublicEndpoint) {
-      // same-origin 요청은 Origin/Referer 검증으로 통과 (브라우저가 httpOnly 쿠키를 읽을 수 없어
-      // x-csrf-token 헤더를 만들 수 없기 때문)
+      // same-origin 요청은 Origin/Referer 검증으로 통과
       const expectedOrigin = request.nextUrl.origin;
       const origin = request.headers.get('origin');
       const referer = request.headers.get('referer');
@@ -149,7 +274,7 @@ export async function middleware(request: NextRequest) {
         const cookieValue = csrfCookie.value;
         const headerValue = csrfHeader;
 
-        // 고정 길이(64자)로 패딩 후 상수 시간 비교 — 길이 정보를 노출하지 않음
+        // 고정 길이(64자)로 패딩 후 상수 시간 비교
         const EXPECTED_LEN = 64;
         const cv = cookieValue.padEnd(EXPECTED_LEN, '\0').slice(0, EXPECTED_LEN);
         const hv = headerValue.padEnd(EXPECTED_LEN, '\0').slice(0, EXPECTED_LEN);

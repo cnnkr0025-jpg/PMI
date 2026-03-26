@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { verifySession } from '@/lib/apiAuth';
+import { RateLimiter } from '@/lib/rateLimit';
+
+const walletReadLimiter = new RateLimiter(30, 60 * 1000); // 분당 30회
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -30,6 +33,11 @@ export async function GET(request: NextRequest) {
     
     const userId = sessionResult.userId;
 
+    const rl = walletReadLimiter.check(userId);
+    if (!rl.success) {
+      return NextResponse.json({ error: '요청이 너무 많습니다.' }, { status: 429 });
+    }
+
     const db = getSupabaseAdmin();
 
     const { data: wallets, error: walletError } = await db
@@ -39,7 +47,10 @@ export async function GET(request: NextRequest) {
       .limit(1);
 
     if (walletError) {
-      return NextResponse.json({ error: walletError.message || '지갑 조회 실패' }, { status: 500 });
+      if (process.env.NODE_ENV !== 'production') {
+        console.error('Wallet fetch error:', walletError.message);
+      }
+      return NextResponse.json({ error: '지갑 조회에 실패했습니다.' }, { status: 500 });
     }
 
     if (!wallets || wallets.length === 0) {
@@ -50,7 +61,10 @@ export async function GET(request: NextRequest) {
         .single();
 
       if (createError) {
-        return NextResponse.json({ error: createError.message || '지갑 생성 실패' }, { status: 500 });
+        if (process.env.NODE_ENV !== 'production') {
+          console.error('Wallet create error:', createError.message);
+        }
+        return NextResponse.json({ error: '지갑 생성에 실패했습니다.' }, { status: 500 });
       }
 
       return NextResponse.json({ wallet: newWallet });
@@ -61,7 +75,7 @@ export async function GET(request: NextRequest) {
     if (process.env.NODE_ENV !== 'production') {
       console.error('Wallet GET error:', error);
     }
-    return NextResponse.json({ error: error?.message || '서버 오류' }, { status: 500 });
+    return NextResponse.json({ error: '서버 오류가 발생했습니다.' }, { status: 500 });
   }
 }
 
@@ -78,7 +92,7 @@ export async function POST(request: NextRequest) {
     if (process.env.NODE_ENV !== 'production') {
       console.error('Wallet POST error:', error);
     }
-    return NextResponse.json({ error: error?.message || '서버 오류' }, { status: 500 });
+    return NextResponse.json({ error: '서버 오류가 발생했습니다.' }, { status: 500 });
   }
 }
 
@@ -95,6 +109,6 @@ export async function PATCH(request: NextRequest) {
     if (process.env.NODE_ENV !== 'production') {
       console.error('Wallet PATCH error:', error);
     }
-    return NextResponse.json({ error: error?.message || '서버 오류' }, { status: 500 });
+    return NextResponse.json({ error: '서버 오류가 발생했습니다.' }, { status: 500 });
   }
 }

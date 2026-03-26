@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
 
     // code가 있으면 Supabase Auth API로 직접 token 교환 (서버사이드 PKCE 대체)
     if (!resolvedAccessToken && code) {
-      console.log('[social-session] Exchanging code for token via Supabase Auth API...');
+      if (process.env.NODE_ENV !== 'production') console.log('[social-session] Exchanging code for token...');
       const tokenRes = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=authorization_code`, {
         method: 'POST',
         headers: {
@@ -31,10 +31,10 @@ export async function POST(request: NextRequest) {
       if (tokenRes.ok) {
         const tokenData = await tokenRes.json();
         resolvedAccessToken = tokenData.access_token;
-        console.log('[social-session] Code exchange successful');
+        if (process.env.NODE_ENV !== 'production') console.log('[social-session] Code exchange successful');
       } else {
         const errBody = await tokenRes.text();
-        console.error('[social-session] Code exchange failed:', tokenRes.status, errBody);
+        if (process.env.NODE_ENV !== 'production') console.error('[social-session] Code exchange failed:', tokenRes.status, errBody);
         return NextResponse.json(
           { error: '인증 코드 교환에 실패했습니다.' },
           { status: 401 }
@@ -55,7 +55,10 @@ export async function POST(request: NextRequest) {
     const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(resolvedAccessToken);
 
     if (userError || !user) {
-      console.error('[social-session] User verification failed:', userError?.message);
+      if (process.env.NODE_ENV !== 'production') {
+        console.error('[social-session] User verification failed:', userError?.message);
+        console.error('[social-session] Access token present:', !!resolvedAccessToken);
+      }
       return NextResponse.json(
         { error: '사용자 인증에 실패했습니다.' },
         { status: 401 }
@@ -76,7 +79,10 @@ export async function POST(request: NextRequest) {
 
     // 사용자가 없으면 생성
     if (dbError || !userData) {
-      console.log('[social-session] User not found in DB, creating...', { userId: user.id, email: user.email, dbError: dbError?.message });
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('[social-session] User not found in DB, creating...');
+        if (dbError) console.log('[social-session] DB error:', dbError.message);
+      }
       
       const { data: newUser, error: insertError } = await supabaseAdmin
         .from('users')
@@ -89,7 +95,10 @@ export async function POST(request: NextRequest) {
         .single();
 
       if (insertError) {
-        console.error('[social-session] User insert error:', insertError.message, insertError.code, insertError.details);
+        if (process.env.NODE_ENV !== 'production') {
+          console.error('[social-session] User insert error:', insertError.message);
+          console.error('[social-session] Insert error code:', insertError.code);
+        }
         
         // 이미 존재하는 경우 (race condition) 다시 조회
         const { data: existingUser } = await supabaseAdmin
@@ -108,9 +117,9 @@ export async function POST(request: NextRequest) {
           
           if (existingByEmail) {
             userName = existingByEmail.name;
-            console.log('[social-session] Found user by email:', existingByEmail.id);
+            if (process.env.NODE_ENV !== 'production') console.log('[social-session] Found user by email');
           } else {
-            console.error('[social-session] User creation completely failed');
+            if (process.env.NODE_ENV !== 'production') console.error('[social-session] User creation completely failed');
             // 실패해도 세션은 생성 (DB 없이도 로그인 가능)
           }
         } else {
@@ -118,7 +127,7 @@ export async function POST(request: NextRequest) {
         }
       } else if (newUser) {
         userName = newUser.name;
-        console.log('[social-session] User created successfully:', newUser.id);
+        if (process.env.NODE_ENV !== 'production') console.log('[social-session] User created successfully');
         
         // 지갑 생성
         const { error: walletError } = await supabaseAdmin
@@ -129,14 +138,16 @@ export async function POST(request: NextRequest) {
           });
         
         if (walletError) {
-          console.error('[social-session] Wallet creation error:', walletError.message, walletError.code);
+          if (process.env.NODE_ENV !== 'production') {
+            console.error('[social-session] Wallet creation error:', walletError.message);
+          }
         } else {
-          console.log('[social-session] Wallet created for user:', user.id);
+          if (process.env.NODE_ENV !== 'production') console.log('[social-session] Wallet created');
         }
       }
     } else {
       userName = userData.name;
-      console.log('[social-session] Existing user found:', userData.id);
+      if (process.env.NODE_ENV !== 'production') console.log('[social-session] Existing user found');
       
       // 기존 사용자인데 지갑이 없으면 생성
       const { data: existingWallet } = await supabaseAdmin
@@ -146,7 +157,7 @@ export async function POST(request: NextRequest) {
         .single();
       
       if (!existingWallet) {
-        console.log('[social-session] Creating missing wallet for existing user:', user.id);
+        if (process.env.NODE_ENV !== 'production') console.log('[social-session] Creating missing wallet');
         await supabaseAdmin
           .from('user_wallets')
           .insert({ user_id: user.id, credits: {} });
@@ -180,7 +191,7 @@ export async function POST(request: NextRequest) {
 
     return response;
   } catch (error: any) {
-    console.error('[social-session] Error:', error);
+    if (process.env.NODE_ENV !== 'production') console.error('[social-session] Error:', error);
     return NextResponse.json(
       { error: '세션 생성 중 오류가 발생했습니다.' },
       { status: 500 }
