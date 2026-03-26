@@ -36,19 +36,19 @@ export default function RootLayout({
   return (
     <html lang="ko">
       <head>
-        {/* DNS 프리페치 + 프리커넥트: 주요 외부 도메인 연결 선점 */}
+        {/* 폰트: 초기 렌더링에 필요 → preconnect */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        {/* AI API 도메인: dns-prefetch → preconnect 격상 (실제 요청 발생 도메인) */}
-        <link rel="preconnect" href="https://api.openai.com" />
-        <link rel="preconnect" href="https://api.anthropic.com" />
-        <link rel="dns-prefetch" href="https://api.perplexity.ai" />
-        <link rel="dns-prefetch" href="https://generativelanguage.googleapis.com" />
-        <link rel="dns-prefetch" href="https://js.toss.im" />
-        {/* Supabase: 인증·실시간 연결에 사용되므로 preconnect */}
+        {/* Supabase: 인증에 즉시 사용 → preconnect */}
         {process.env.NEXT_PUBLIC_SUPABASE_URL && (
           <link rel="preconnect" href={process.env.NEXT_PUBLIC_SUPABASE_URL} />
         )}
+        {/* AI API / 결제: 채팅·결제 시점에 연결 → dns-prefetch만으로 충분 */}
+        <link rel="dns-prefetch" href="https://api.openai.com" />
+        <link rel="dns-prefetch" href="https://api.anthropic.com" />
+        <link rel="dns-prefetch" href="https://api.perplexity.ai" />
+        <link rel="dns-prefetch" href="https://generativelanguage.googleapis.com" />
+        <link rel="dns-prefetch" href="https://js.toss.im" />
         {/* 예측적 프리페치: 마우스 hover 시 해당 페이지 JS 미리 로드 */}
         <script dangerouslySetInnerHTML={{ __html: `
 (function(){

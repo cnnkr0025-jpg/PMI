@@ -7,7 +7,11 @@ import { useStore } from '@/store';
 import { elementClassMap } from '@/types/design';
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const { currentUser, themeSettings, customDesignTheme, language } = useStore();
+  // 개별 선택자 — 테마/언어와 무관한 상태 변경 시 리렌더 방지
+  const currentUser = useStore((s) => s.currentUser);
+  const themeSettings = useStore((s) => s.themeSettings);
+  const customDesignTheme = useStore((s) => s.customDesignTheme);
+  const language = useStore((s) => s.language);
   const pathname = usePathname();
   const disableCustomDesign = pathname === '/design-editor';
 

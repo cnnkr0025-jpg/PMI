@@ -40,15 +40,14 @@ const nextConfig = {
       'recharts',
       'katex',
     ],
+    // Next.js 14에서 serverExternalPackages 대신 experimental 키를 사용
+    serverComponentsExternalPackages: ['@supabase/supabase-js'],
   },
 
   // HTTP/2 서버 푸시 힌트
   poweredByHeader: false,
 
-  // 서버 컴포넌트 외부 패키지
-  serverExternalPackages: ['@supabase/supabase-js'],
-
-  // 웹팩 최적화
+  // 웹팩 최적화 (Next.js 내장 청크스플리팅 사용 — 직접 override 시 성능 역효과)
   webpack: (config, { dev, isServer }) => {
     config.resolve.alias = {
       ...config.resolve.alias,
@@ -59,31 +58,6 @@ const nextConfig = {
       config.optimization = {
         ...config.optimization,
         moduleIds: 'deterministic',
-        splitChunks: {
-          ...config.optimization.splitChunks,
-          cacheGroups: {
-            ...(config.optimization.splitChunks?.cacheGroups || {}),
-            // 무거운 라이브러리를 별도 청크로 분리 (초기 번들 최소화)
-            recharts: {
-              name: 'recharts',
-              test: /[\\/]node_modules[\\/]recharts[\\/]/,
-              chunks: 'all',
-              priority: 30,
-            },
-            katex: {
-              name: 'katex',
-              test: /[\\/]node_modules[\\/]katex[\\/]/,
-              chunks: 'all',
-              priority: 30,
-            },
-            supabase: {
-              name: 'supabase',
-              test: /[\\/]node_modules[\\/]@supabase[\\/]/,
-              chunks: 'all',
-              priority: 20,
-            },
-          },
-        },
       };
     }
 

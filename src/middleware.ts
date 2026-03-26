@@ -139,24 +139,8 @@ function hasNullByte(p: string): boolean {
   return p.includes('\0') || /%00/i.test(p);
 }
 
-// ── 보안 헤더 (이중 레이어 — next.config.js + 미들웨어 동시 적용) ──
-function setSecurityHeaders(response: NextResponse): NextResponse {
-  response.headers.set('X-Content-Type-Options', 'nosniff');
-  response.headers.set('X-Frame-Options', 'DENY');
-  response.headers.set('X-XSS-Protection', '1; mode=block');
-  response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
-  response.headers.set('Permissions-Policy', 'geolocation=(), microphone=(), camera=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=()');
-  response.headers.set('X-DNS-Prefetch-Control', 'on');
-  response.headers.set('X-Download-Options', 'noopen');
-  response.headers.set('X-Permitted-Cross-Domain-Policies', 'none');
-  // Cross-Origin 격리 헤더
-  response.headers.set('Cross-Origin-Opener-Policy', 'same-origin');
-  response.headers.set('Cross-Origin-Resource-Policy', 'same-origin');
-  // HSTS (미들웨어 레이어에서도 이중 적용)
-  if (process.env.NODE_ENV === 'production') {
-    response.headers.set('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload');
-  }
-  // 서버 정보 은닉
+// ── 서버 정보 은닉 (next.config.js headers()로 보안헤더 처리, 미들웨어는 서버 식별자만 제거) ──
+function stripServerHeaders(response: NextResponse): NextResponse {
   response.headers.delete('X-Powered-By');
   response.headers.delete('Server');
   return response;
@@ -192,7 +176,7 @@ export async function middleware(request: NextRequest) {
   const isApiPath = pathname.startsWith('/api/');
 
   if (!isProtectedPath && !isApiPath) {
-    return setSecurityHeaders(NextResponse.next());
+    return NextResponse.next();
   }
 
   // ④ 악성 User-Agent 차단 (API 경로에서만 — 정상 브라우저는 통과)
@@ -300,7 +284,7 @@ export async function middleware(request: NextRequest) {
     });
   }
 
-  return setSecurityHeaders(response);
+  return stripServerHeaders(response);
 }
 
 // Middleware가 실행될 경로 설정

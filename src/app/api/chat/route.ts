@@ -128,6 +128,10 @@ const OPENAI_MODEL_MAP: { [key: string]: string } = {
   'gpt52': 'gpt-5.2',
   'gpt53instant': 'gpt-5.3-chat-latest',
   'gpt54': 'gpt-5.4',
+  'gpt5codex': 'gpt-5-codex',
+  'gpt51codex': 'gpt-5.1-codex',
+  'gpt51codexmax': 'gpt-5.1-codex',
+  'gpt52codex': 'gpt-5.2-codex',
   'o3': 'o3',
   'o3mini': 'o3-mini',
   'o4mini': 'o4-mini',
@@ -1202,10 +1206,10 @@ export async function POST(request: NextRequest) {
       ? '必ず日本語で回答してください。'
       : '반드시 한국어로 답변해주세요.') + speechStyle;
     const minimumVisibleAnswerRule = resolvedLanguage === 'en'
-      ? 'The visible answer before any hidden summary or memory block must be at least 3 separate lines.'
+      ? 'The visible answer before any hidden summary or memory block must be at least 5 separate lines.'
       : resolvedLanguage === 'ja'
-      ? '非表示の要約やメモリブロックの前にある可視回答は、必ず3行以上で書いてください。'
-      : '숨겨진 요약이나 메모리 블록 전에 보이는 답변은 반드시 3줄 이상으로 작성해주세요.';
+      ? '非表示の要約やメモリブロックの前にある可視回答は、必ず5行以上で書いてください。'
+      : '숨겨진 요약이나 메모리 블록 전에 보이는 답변은 반드시 5줄 이상으로 작성해주세요.';
 
     const normalizeStoredFact = (fact: unknown) => {
       if (typeof fact !== 'string') return '';

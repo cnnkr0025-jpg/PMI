@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState, memo } from 'react';
 // 로그인 없이 접근 가능
 import { ChevronDown, ChevronUp, MessageSquare, CreditCard, Settings, Palette, Bot, Sparkles, Shield } from 'lucide-react';
 import { useStore } from '@/store';
@@ -12,7 +12,7 @@ type GuideSection = {
   content: React.ReactNode;
 };
 
-function AccordionItem({ section, isOpen, onToggle }: { section: GuideSection; isOpen: boolean; onToggle: () => void }) {
+const AccordionItem = memo(function AccordionItem({ section, isOpen, onToggle }: { section: GuideSection; isOpen: boolean; onToggle: () => void }) {
   return (
     <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden">
       <button
@@ -36,7 +36,24 @@ function AccordionItem({ section, isOpen, onToggle }: { section: GuideSection; i
       )}
     </div>
   );
-}
+});
+
+// setOpenId를 props로 받아 onToggle을 내부에서 메모이제이션
+const MemoizedAccordionItem = memo(function MemoizedAccordionItem({
+  section,
+  openId,
+  setOpenId,
+}: {
+  section: GuideSection;
+  openId: string | null;
+  setOpenId: React.Dispatch<React.SetStateAction<string | null>>;
+}) {
+  const handleToggle = useCallback(() => {
+    setOpenId((prev) => (prev === section.id ? null : section.id));
+  }, [section.id, setOpenId]);
+
+  return <AccordionItem section={section} isOpen={openId === section.id} onToggle={handleToggle} />;
+});
 
 export default function GuidePage() {
   const [openId, setOpenId] = useState<string | null>('start');
@@ -424,11 +441,11 @@ export default function GuidePage() {
 
         <div className="space-y-3">
           {sections.map((section) => (
-            <AccordionItem
+            <MemoizedAccordionItem
               key={section.id}
               section={section}
-              isOpen={openId === section.id}
-              onToggle={() => setOpenId(openId === section.id ? null : section.id)}
+              openId={openId}
+              setOpenId={setOpenId}
             />
           ))}
         </div>
