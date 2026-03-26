@@ -151,6 +151,7 @@ function stripServerHeaders(response: NextResponse): NextResponse {
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const clientIp = getClientIp(request);
+  try {
 
   // ① 이미 차단된 IP (허니팟 블랙리스트)
   if (isIpBanned(clientIp)) {
@@ -285,6 +286,18 @@ export async function middleware(request: NextRequest) {
   }
 
   return stripServerHeaders(response);
+  } catch (error) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('[Middleware] Unexpected error:', error);
+    }
+
+    // 미들웨어 오류로 사이트 전체가 500이 되는 상황 방지
+    if (pathname.startsWith('/api/')) {
+      return NextResponse.json({ error: 'ERR_MW_00', reason: 'Middleware failure' }, { status: 500 });
+    }
+
+    return NextResponse.next();
+  }
 }
 
 // Middleware가 실행될 경로 설정
