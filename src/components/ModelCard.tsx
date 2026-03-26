@@ -23,7 +23,7 @@ export const ModelCard: React.FC<ModelCardProps> = React.memo(({
   const { t } = useTranslation();
   const isVideoModel = model.series === 'video';
   const [showBatchInfo, setShowBatchInfo] = useState(false);
-  const priceData = getFixedDisplayPriceOrFallback(model.id, model.piWon);
+  const priceData = getFixedDisplayPriceOrFallback(model.id, model.piWon, model.tier);
   const displayPrice = isVideoModel ? (model.pricePerSecond ?? model.piWon) : priceData.price;
   
   const handleQuantityChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {

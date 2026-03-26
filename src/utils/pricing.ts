@@ -68,7 +68,8 @@ function calculateEffectiveDiscount(
     const model = models.find((m) => m.id === sel.modelId);
     if (!model) return;
     
-    const priceData = getFixedDisplayPriceOrFallback(model.id, model.piWon);
+    const basePrice = model.series === 'video' ? (model.pricePerSecond ?? model.piWon) : model.piWon;
+    const priceData = getFixedDisplayPriceOrFallback(model.id, basePrice, model.tier);
     const tier = priceData.tier;
     const alpha = modelWeights[tier] || 1.0;
     const cap = discountCaps[tier] || 0.30;
@@ -132,7 +133,8 @@ export function calculatePrice(
   validSelections.forEach((sel) => {
     const model = models.find((m) => m.id === sel.modelId);
     if (model) {
-      const priceData = getFixedDisplayPriceOrFallback(model.id, model.piWon);
+      const basePrice = model.series === 'video' ? (model.pricePerSecond ?? model.piWon) : model.piWon;
+      const priceData = getFixedDisplayPriceOrFallback(model.id, basePrice, model.tier);
       // 모델에 티어 정보가 없으면 여기서 설정
       if (!model.tier) {
         model.tier = priceData.tier;
@@ -295,14 +297,20 @@ const fixedDisplayPriceWon: Record<string, number> = Object.entries(modelData).r
 }, {} as Record<string, number>);
 
 // 모델 ID를 받아 고정 표시가(원)와 티어 정보를 반환
-export function getFixedDisplayPriceOrFallback(modelId: string, piWon: number): { price: number; tier: PriceTier } {
+export function getFixedDisplayPriceOrFallback(
+  modelId: string,
+  piWon: number,
+  fallbackTier?: PriceTier,
+): { price: number; tier: PriceTier } {
   const data = modelData[modelId];
   if (data) {
     return { price: data.price, tier: data.tier };
   }
   return { 
-    price: getDisplayPrice(piWon),
-    tier: 'low' // 기본값은 low로 설정
+    // 고정 판매가 매핑이 없는 모델은 `models.ts`의 piWon을 그대로 표시 가격으로 사용
+    // (fallback에서 임의 마진 계산을 하면 UI가 models.ts 값과 불일치할 수 있음)
+    price: piWon,
+    tier: fallbackTier ?? 'low'
   };
 }
 
@@ -406,7 +414,8 @@ export function calculatePMCEarn(
     const model = models.find((m) => m.id === sel.modelId);
     if (!model) return;
     
-    const priceData = getFixedDisplayPriceOrFallback(model.id, model.piWon);
+    const basePrice = model.series === 'video' ? (model.pricePerSecond ?? model.piWon) : model.piWon;
+    const priceData = getFixedDisplayPriceOrFallback(model.id, basePrice, model.tier);
     const tier = priceData.tier;
     const modelPrice = priceData.price * sel.quantity;
     

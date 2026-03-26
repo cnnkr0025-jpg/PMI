@@ -2042,6 +2042,11 @@ export const useStore = create<AppState>()(
       },
       // 데이터 복원 시 사용자별 데이터 로드
       onRehydrateStorage: () => (state) => {
+        // models는 항상 initialModels로 복원 (가격 정보 보장)
+        if (state) {
+          state.models = initialModels;
+        }
+        
         if (state?.currentUser) {
           const userId = state.currentUser.id;
           const storage = localStorage.getItem('pick-my-ai-storage');

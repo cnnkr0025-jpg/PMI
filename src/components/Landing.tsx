@@ -50,7 +50,7 @@ const pricingExamples = ['gpt53instant', 'gpt54', 'sonnet46'].map((id) => {
   return {
     id,
     title: model.displayName,
-    price: getFixedDisplayPriceOrFallback(model.id, model.piWon).price,
+    price: getFixedDisplayPriceOrFallback(model.id, model.piWon, model.tier).price,
   };
 });
 
@@ -311,7 +311,7 @@ export const Landing: React.FC = () => {
                               {!isAuthenticated && <Lock className="h-4 w-4 text-gray-400" />}
                             </div>
                             <div className="text-sm font-medium text-blue-600">
-                              {formatWon(getFixedDisplayPriceOrFallback(model.id, model.piWon).price)}
+                              {formatWon(getFixedDisplayPriceOrFallback(model.id, model.piWon, model.tier).price)}
                             </div>
                           </CardContent>
                         </Card>

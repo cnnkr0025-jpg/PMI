@@ -119,7 +119,7 @@ export const Dashboard: React.FC = () => {
   const getSwapPMCPerCredit = useCallback((modelId: string) => {
     const model = models.find(m => m.id === modelId);
     if (!model) return 0;
-    const pricePerCredit = getFixedDisplayPriceOrFallback(model.id, model.piWon).price;
+    const pricePerCredit = getFixedDisplayPriceOrFallback(model.id, model.piWon, model.tier).price;
     return Math.max(pricePerCredit - 1, 0);
   }, [models]);
 
@@ -159,7 +159,7 @@ export const Dashboard: React.FC = () => {
       });
       return;
     }
-    const pricePerCredit = getFixedDisplayPriceOrFallback(model.id, model.piWon).price;
+    const pricePerCredit = getFixedDisplayPriceOrFallback(model.id, model.piWon, model.tier).price;
     const result = swapCreditsToPMC([{ modelId: swapModelId, qty: safeQty, pricePerCredit }]);
     if (result.success) {
       import('sonner').then(({ toast }) => {
@@ -321,7 +321,7 @@ export const Dashboard: React.FC = () => {
                   <option value="">모델 선택...</option>
                   {swapModels.map(m => (
                     <option key={m.id} value={m.id}>
-                      {m.displayName} (잔여 {wallet?.credits[m.id] || 0}회, 개당 {getFixedDisplayPriceOrFallback(m.id, m.piWon).price}원)
+                      {m.displayName} (잔여 {wallet?.credits[m.id] || 0}회, 개당 {getFixedDisplayPriceOrFallback(m.id, m.piWon, m.tier).price}원)
                     </option>
                   ))}
                 </select>

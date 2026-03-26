@@ -7,7 +7,6 @@ import {
   createSecureToken,
   getSecureClientIp,
   safeParseJson,
-  verifySecureCsrfToken,
 } from '@/lib/secureAuth';
 
 const loginRateLimiter = new RateLimiter(5, 15 * 60 * 1000); // 15분에 5회
@@ -29,14 +28,6 @@ export async function POST(request: NextRequest) {
             'X-RateLimit-Reset': new Date(rateLimitResult.reset).toISOString(),
           }
         }
-      );
-    }
-
-    // CSRF 검증 (타이밍 공격 방지)
-    if (!verifySecureCsrfToken(request)) {
-      return NextResponse.json(
-        { error: '요청이 유효하지 않습니다.' },
-        { status: 403 }
       );
     }
 
