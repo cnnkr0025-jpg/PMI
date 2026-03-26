@@ -2,6 +2,38 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ════════════════════════════════════════════════════════
+   View Transitions API — 페이지 이동을 즉각적으로 체감
+   ════════════════════════════════════════════════════════ */
+@view-transition {
+  navigation: auto;
+}
+
+::view-transition-old(root) {
+  animation: vt-fade-out 120ms ease-out both;
+}
+::view-transition-new(root) {
+  animation: vt-fade-in 160ms ease-out both;
+}
+
+@keyframes vt-fade-out {
+  from { opacity: 1; transform: scale(1); }
+  to   { opacity: 0; transform: scale(0.99); }
+}
+@keyframes vt-fade-in {
+  from { opacity: 0; transform: scale(1.01); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* 헤더는 View Transition에서 제외 (sticky 요소가 움직이면 어색함) */
+.app-header {
+  view-transition-name: site-header;
+}
+::view-transition-old(site-header),
+::view-transition-new(site-header) {
+  animation: none;
+}
+
 @layer base {
   html, body {
     height: 100%;
@@ -581,4 +613,48 @@
 
 .btn-shine:hover::after {
   transform: rotate(45deg) translate3d(100%, 0, 0);
+}
+
+/* ════════════════════════════════════════════════════════
+   렌더 성능 최적화
+   ════════════════════════════════════════════════════════ */
+
+/* GPU 레이어 승격: hover/transition 있는 요소 */
+.modern-card,
+.btn-shine,
+[class*="transition-"] {
+  will-change: auto;
+}
+.modern-card:hover {
+  will-change: transform, box-shadow;
+}
+
+/* 아이콘 최적화 — 무결점 픽셀 렌더 */
+svg {
+  shape-rendering: geometricPrecision;
+}
+
+/* 다크모드 헤더 배경 CSS 변수 (FOUC 인라인 스크립트와 연동) */
+:root {
+  --header-bg: #fff;
+}
+.dark {
+  --header-bg: #111827;
+}
+
+/* 폰트 스무딩 */
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* 터치 기기 탭 하이라이트 제거 */
+a, button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 스크롤 성능 */
+* {
+  -webkit-overflow-scrolling: touch;
 }

@@ -3,20 +3,35 @@ import { Inter } from 'next/font/google';
 import dynamic from 'next/dynamic';
 import { Toaster } from 'sonner';
 import { ThemeProvider } from '@/components/ThemeProvider';
-import { SessionInitializer } from '@/components/SessionInitializer';
-import { ServiceWorkerRegistrar } from '@/components/ServiceWorkerRegistrar';
 import './globals.css';
 
-// 동적 임포트로 초기 로딩 최적화
+// Header: ssr=false → 서버에서 인증상태 불일치로 생기는 auth-flash 완전 제거
 const Header = dynamic(() => import('@/components/Header').then(mod => ({ default: mod.Header })), {
-  ssr: true,
-  loading: () => <div className="h-16 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700" />
+  ssr: false,
+  loading: () => (
+    <div
+      className="app-header sticky top-0 z-50 border-b border-gray-200 dark:border-gray-700"
+      style={{ height: 56, background: 'var(--header-bg, #fff)' }}
+      aria-hidden="true"
+    />
+  ),
 });
+
+// 비임계 컴포넌트는 클라이언트에서만 지연 로드 (초기 번들에서 완전 제외)
+const SessionInitializer = dynamic(
+  () => import('@/components/SessionInitializer').then(mod => ({ default: mod.SessionInitializer })),
+  { ssr: false }
+);
+const ServiceWorkerRegistrar = dynamic(
+  () => import('@/components/ServiceWorkerRegistrar').then(mod => ({ default: mod.ServiceWorkerRegistrar })),
+  { ssr: false }
+);
 
 const inter = Inter({
   subsets: ['latin'],
   display: 'swap',
   preload: true,
+  adjustFontFallback: true,
   variable: '--font-inter',
 });
 
@@ -24,75 +39,91 @@ export const metadata: Metadata = {
   title: 'Pick-My-AI - 커스텀 AI 선택 플랫폼',
   description: 'AI, 내가 고르고 내가 정한다. 원하는 모델 × 원하는 횟수 = 딱 그만큼만 결제',
   icons: {
-    icon: [
-      { url: '/icon.svg', type: 'image/svg+xml' },
-    ],
+    icon: [{ url: '/icon.svg', type: 'image/svg+xml' }],
     shortcut: '/icon.svg',
   },
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+// ── 다크모드 초기화 스크립트 ──────────────────────────────────────────
+// 첫 번째 페인트 전에 동기적으로 실행 → FOUC(깜빡임) 완전 제거
+const THEME_INIT_SCRIPT = `(function(){
+  try {
+    var r=localStorage.getItem('pick-my-ai-storage');
+    if(!r)return;
+    var s=JSON.parse(r).state;
+    var m=s&&s.themeSettings&&s.themeSettings.mode||'system';
+    var d=m==='dark'||(m==='system'&&matchMedia('(prefers-color-scheme:dark)').matches);
+    if(d)document.documentElement.classList.add('dark');
+    var c=(s&&s.themeSettings&&s.themeSettings.color)||(s&&s.currentUser&&s.currentUser.theme)||'blue';
+    document.documentElement.setAttribute('data-theme',c);
+  }catch(e){}
+})();`;
+
+// ── 적극적 프리페치 스크립트 ─────────────────────────────────────────
+// ① hover/touch 즉시 프리페치  ② idle 시 핵심 라우트 선제 프리페치
+const PREFETCH_SCRIPT = `(function(){
+  var f=new Set(),n=navigator;
+  function p(h){
+    if(f.has(h))return;f.add(h);
+    var l=document.createElement('link');
+    l.rel='prefetch';l.href=h;l.as='document';
+    document.head.appendChild(l);
+  }
+  var R=['/chat','/configurator','/dashboard','/checkout','/login','/guide','/feedback'];
+  function onLink(e){
+    var el=e.target&&e.target.closest('a[href]');
+    if(!el)return;
+    var h=el.getAttribute('href');
+    if(h&&h[0]==='/'&&R.some(function(r){return h===r||h.startsWith(r+'/');}))p(h);
+  }
+  document.addEventListener('mouseover',onLink,{passive:true});
+  document.addEventListener('touchstart',onLink,{passive:true});
+  // idle 상태에서 핵심 라우트 선제 프리페치
+  var idle=typeof requestIdleCallback!=='undefined'?requestIdleCallback:function(cb){setTimeout(cb,200)};
+  idle(function(){
+    // 세션 쿠키 유무로 로그인 상태 간이 판단
+    var loggedIn=document.cookie.indexOf('session=')!==-1;
+    var routes=loggedIn?['/chat','/configurator','/dashboard']:['/guide','/login'];
+    routes.forEach(p);
+  },{timeout:2000});
+})();`;
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ko">
+    <html lang="ko" suppressHydrationWarning>
       <head>
-        {/* 폰트: 초기 렌더링에 필요 → preconnect */}
+        {/* ① 다크모드: 첫 페인트 전 동기 실행 → 깜빡임 제로 */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+
+        {/* ② 폰트 preconnect */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        {/* Supabase: 인증에 즉시 사용 → preconnect */}
+
+        {/* ③ Supabase preconnect */}
         {process.env.NEXT_PUBLIC_SUPABASE_URL && (
           <link rel="preconnect" href={process.env.NEXT_PUBLIC_SUPABASE_URL} />
         )}
-        {/* AI API / 결제: 채팅·결제 시점에 연결 → dns-prefetch만으로 충분 */}
+
+        {/* ④ AI API / 결제: dns-prefetch */}
         <link rel="dns-prefetch" href="https://api.openai.com" />
         <link rel="dns-prefetch" href="https://api.anthropic.com" />
         <link rel="dns-prefetch" href="https://api.perplexity.ai" />
         <link rel="dns-prefetch" href="https://generativelanguage.googleapis.com" />
         <link rel="dns-prefetch" href="https://js.toss.im" />
-        {/* 예측적 프리페치: 마우스 hover 시 해당 페이지 JS 미리 로드 */}
-        <script dangerouslySetInnerHTML={{ __html: `
-(function(){
-  var prefetched = new Set();
-  var ROUTES = ['/chat','/configurator','/dashboard','/checkout','/login','/guide'];
-  function prefetch(href){
-    if(prefetched.has(href)) return;
-    prefetched.add(href);
-    var link = document.createElement('link');
-    link.rel = 'prefetch';
-    link.href = href;
-    link.as = 'document';
-    document.head.appendChild(link);
-  }
-  document.addEventListener('mouseover', function(e){
-    var el = e.target && e.target.closest('a[href]');
-    if(!el) return;
-    var href = el.getAttribute('href');
-    if(href && href.startsWith('/') && ROUTES.some(function(r){ return href === r || href.startsWith(r+'/'); })){
-      prefetch(href);
-    }
-  }, {passive: true});
-  // 터치 디바이스: touchstart 시 프리페치
-  document.addEventListener('touchstart', function(e){
-    var el = e.target && e.target.closest('a[href]');
-    if(!el) return;
-    var href = el.getAttribute('href');
-    if(href && href.startsWith('/') && ROUTES.some(function(r){ return href === r || href.startsWith(r+'/'); })){
-      prefetch(href);
-    }
-  }, {passive: true});
-})();
-        ` }} />
+
+        {/* ⑤ 아이콘 preload */}
+        <link rel="preload" href="/icon.svg" as="image" type="image/svg+xml" />
       </head>
       <body className={inter.className}>
+        {/* ⑥ 프리페치 스크립트: idle 콜백으로 non-blocking */}
+        <script dangerouslySetInnerHTML={{ __html: PREFETCH_SCRIPT }} />
+
         <ThemeProvider>
-          <ServiceWorkerRegistrar />
           <SessionInitializer />
+          <ServiceWorkerRegistrar />
           <Header />
           {children}
-          <Toaster 
+          <Toaster
             position="bottom-center"
             closeButton
             toastOptions={{
@@ -108,4 +139,3 @@ export default function RootLayout({
     </html>
   );
 }
-

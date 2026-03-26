@@ -6,21 +6,15 @@ export function ServiceWorkerRegistrar() {
   useEffect(() => {
     if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
 
-    const enableSW = process.env.NEXT_PUBLIC_ENABLE_SW === 'true';
-
-    // 기본값: SW 비활성. 이전 버전 SW가 남아 있으면 해제해서 캐시 꼬임/오류를 방지
-    if (!enableSW) {
-      navigator.serviceWorker.getRegistrations()
-        .then((regs) => Promise.all(regs.map((reg) => reg.unregister())))
-        .catch(() => {});
-      return;
-    }
-
-    navigator.serviceWorker.register('/sw.js', { scope: '/' })
+    // SW 기본 활성화: 정적 자산 캐싱으로 재방문 속도 대폭 향상
+    navigator.serviceWorker
+      .register('/sw.js', { scope: '/', updateViaCache: 'none' })
       .then((reg) => {
-        // 새 sw.js가 있으면 즉시 반영
         reg.update().catch(() => {});
-        reg.waiting?.postMessage({ type: 'SKIP_WAITING' });
+        // 새 SW가 대기 중이면 즉시 활성화
+        if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+
+        navigator.serviceWorker.addEventListener('controllerchange', () => {});
       })
       .catch(() => {});
   }, []);

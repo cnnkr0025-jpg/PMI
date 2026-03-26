@@ -263,21 +263,22 @@ export function SessionInitializer() {
       }
     };
 
-    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    let cancelFn: (() => void) | null = null;
 
     if (isProtectedPath) {
+      // 보호된 경로: 즉시 실행
       void run();
+    } else if (typeof (window as any).requestIdleCallback !== 'undefined') {
+      // 유휴 상태에서 실행 (메인 스레드 점유 최소화)
+      const id = (window as any).requestIdleCallback(() => { void run(); }, { timeout: 1500 });
+      cancelFn = () => (window as any).cancelIdleCallback(id);
     } else {
-      timeoutId = setTimeout(() => {
-        void run();
-      }, 900);
+      // 폴백: 600ms 후 실행
+      const id = setTimeout(() => { void run(); }, 600);
+      cancelFn = () => clearTimeout(id);
     }
 
-    return () => {
-      if (timeoutId !== null) {
-        clearTimeout(timeoutId);
-      }
-    };
+    return () => { cancelFn?.(); };
   }, [isAuthenticated, isProtectedPath]);
 
   // 컴포넌트 언마운트 시 Realtime 구독 해제

@@ -39,6 +39,11 @@ const nextConfig = {
       'katex',
     ],
     serverComponentsExternalPackages: ['@supabase/supabase-js', 'crypto'],
+    // 클라이언트 네비게이션 시 캐시된 라우트 우선 사용 → 재방문 체감 속도 향상
+    staleTimes: {
+      dynamic: 30,   // 동적 페이지 30초 캐시
+      static: 180,   // 정적 페이지 3분 캐시
+    },
   },
 
   // HTTP/2 서버 푸시 힌트
@@ -83,6 +88,20 @@ const nextConfig = {
             key: 'Cache-Control',
             value: 'public, max-age=31536000, immutable',
           },
+        ],
+      },
+      {
+        // SVG / 이미지 자산
+        source: '/:path*.svg',
+        headers: [
+          { key: 'Cache-Control', value: 'public, max-age=86400, stale-while-revalidate=604800' },
+        ],
+      },
+      {
+        // 정적 페이지 단기 CDN 캐시 (Netlify Edge에서 빠른 응답)
+        source: '/(guide|login|feedback)',
+        headers: [
+          { key: 'Cache-Control', value: 'public, s-maxage=60, stale-while-revalidate=3600' },
         ],
       },
       {
