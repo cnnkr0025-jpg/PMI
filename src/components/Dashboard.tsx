@@ -15,21 +15,17 @@ import {
   Plus,
   BarChart3,
   Sparkles,
-  ArrowRightLeft,
   Coins,
   Star
 } from 'lucide-react';
-import { formatWon, getFixedDisplayPriceOrFallback } from '@/utils/pricing';
+import { formatWon } from '@/utils/pricing';
 import { cn } from '@/utils/cn';
 import { useTranslation } from '@/utils/translations';
 
 export const Dashboard: React.FC = () => {
   const router = useRouter();
-  const { models, wallet, chatSessions, getAvailablePMC, pmcBalance, swapCreditsToPMC, bookmarkedMessages } = useStore();
+  const { models, wallet, chatSessions, getAvailablePMC, pmcBalance, bookmarkedMessages } = useStore();
   const [showAllActivity, setShowAllActivity] = React.useState(false);
-  const [swapModelId, setSwapModelId] = React.useState('');
-  const [swapQty, setSwapQty] = React.useState(1);
-  const [showSwap, setShowSwap] = React.useState(false);
   const { t } = useTranslation();
 
   React.useEffect(() => {
@@ -120,62 +116,6 @@ export const Dashboard: React.FC = () => {
     return 'bg-green-500';
   }, []);
 
-  const getSwapPMCPerCredit = useCallback((modelId: string) => {
-    const model = models.find(m => m.id === modelId);
-    if (!model) return 0;
-    const pricePerCredit = getFixedDisplayPriceOrFallback(model.id, model.piWon, model.tier).price;
-    return Math.max(pricePerCredit - 1, 0);
-  }, [models]);
-
-  const swapModels = useMemo(() => {
-    if (!wallet) return [];
-    return models.filter(m => (
-      m.enabled &&
-      (wallet.credits[m.id] || 0) > 0 &&
-      m.series !== 'image' &&
-      m.series !== 'video' &&
-      getSwapPMCPerCredit(m.id) > 0
-    ));
-  }, [models, wallet, getSwapPMCPerCredit]);
-
-  React.useEffect(() => {
-    if (!showSwap) return;
-    if (swapModels.length === 0) {
-      setSwapModelId('');
-      return;
-    }
-    if (!swapModelId || !swapModels.some(model => model.id === swapModelId)) {
-      setSwapModelId(swapModels[0].id);
-      setSwapQty(1);
-    }
-  }, [showSwap, swapModelId, swapModels]);
-
-  const handleSwap = useCallback(() => {
-    if (!swapModelId || swapQty <= 0) return;
-    const model = models.find(m => m.id === swapModelId);
-    if (!model) return;
-    const available = wallet?.credits[swapModelId] || 0;
-    const safeQty = Math.max(1, Math.min(available, Math.floor(Number.isFinite(swapQty) ? swapQty : 1)));
-    const expectedPMCPerCredit = getSwapPMCPerCredit(swapModelId);
-    if (expectedPMCPerCredit <= 0) {
-      import('sonner').then(({ toast }) => {
-        toast.error('이 모델은 환전 가능한 PMC가 없어 환전할 수 없습니다.');
-      });
-      return;
-    }
-    const pricePerCredit = getFixedDisplayPriceOrFallback(model.id, model.piWon, model.tier).price;
-    const result = swapCreditsToPMC([{ modelId: swapModelId, qty: safeQty, pricePerCredit }]);
-    if (result.success) {
-      import('sonner').then(({ toast }) => {
-        toast.success(`✅ 환전 완료! +${result.totalPMC} PMC (수수료 ${result.totalFee}원)`);
-      });
-      setSwapQty(1);
-    } else {
-      import('sonner').then(({ toast }) => {
-        toast.error('환전 가능한 모델 또는 수량을 다시 확인해주세요.');
-      });
-    }
-  }, [swapModelId, swapQty, models, wallet, swapCreditsToPMC, getSwapPMCPerCredit]);
   
   if (!wallet) {
     return (
@@ -293,76 +233,8 @@ export const Dashboard: React.FC = () => {
           </div>
         </div>
         
-        {/* PMC 스왑 + 북마크 요약 */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-          {/* 크레딧 → PMC 환전 */}
-          <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-5">
-            <div className="flex items-center gap-2 mb-3">
-              <ArrowRightLeft className="w-5 h-5 text-blue-600" />
-              <h3 className="text-sm font-bold text-blue-800">크레딧 → PMC 환전</h3>
-              <span className="text-xs text-blue-500">(수수료 1원/개)</span>
-            </div>
-            {!showSwap ? (
-              <button
-                onClick={() => setShowSwap(true)}
-                className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                환전하기
-              </button>
-            ) : (
-              <div className="space-y-2">
-                {swapModels.length === 0 && (
-                  <div className="text-sm text-blue-700 bg-white/70 border border-blue-200 rounded-lg px-3 py-2">
-                    현재 환전 가능한 크레딧이 없습니다.
-                  </div>
-                )}
-                <select
-                  value={swapModelId}
-                  onChange={e => { setSwapModelId(e.target.value); setSwapQty(1); }}
-                  className="w-full text-sm px-3 py-2 border border-blue-300 rounded-lg bg-white focus:outline-none"
-                  disabled={swapModels.length === 0}
-                >
-                  <option value="">모델 선택...</option>
-                  {swapModels.map(m => (
-                    <option key={m.id} value={m.id}>
-                      {m.displayName} (잔여 {wallet?.credits[m.id] || 0}회, 개당 {getFixedDisplayPriceOrFallback(m.id, m.piWon, m.tier).price}원)
-                    </option>
-                  ))}
-                </select>
-                {swapModelId && (
-                  <>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        min={1}
-                        max={wallet?.credits[swapModelId] || 0}
-                        value={swapQty}
-                        onChange={e => setSwapQty(Number(e.target.value))}
-                        className="w-20 text-sm px-3 py-2 border border-blue-300 rounded-lg focus:outline-none"
-                      />
-                      <span className="text-xs text-gray-500">개 = +{swapQty * getSwapPMCPerCredit(swapModelId)} PMC</span>
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={handleSwap}
-                        className="flex-1 px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
-                      >
-                        환전
-                      </button>
-                      <button
-                        onClick={() => setShowSwap(false)}
-                        className="px-3 py-1.5 bg-gray-100 text-gray-600 text-sm rounded-lg hover:bg-gray-200 transition-colors"
-                      >
-                        취소
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* 북마크 요약 */}
+        {/* 북마크 요약 */}
+        <div className="mb-6">
           <div className="bg-gradient-to-br from-yellow-50 to-amber-50 border border-yellow-200 rounded-xl p-5">
             <div className="flex items-center gap-2 mb-3">
               <Star className="w-5 h-5 text-yellow-500 fill-yellow-400" />

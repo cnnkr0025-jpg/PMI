@@ -757,25 +757,6 @@ export const useStore = create<AppState>()(
           wallet: updatedWallet
         });
         
-        // Supabase에 동기화 (세션 쿠키 기반)
-        if (state.currentUser) {
-          try {
-            await fetch('/api/wallet', {
-              method: 'POST',
-              credentials: 'include',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                credits,
-                type: 'purchase',
-                description: '크레딧 구매'
-              })
-            });
-          } catch (error) {
-            if (process.env.NODE_ENV !== 'production') {
-              console.error('Supabase 크레딧 동기화 실패:', error);
-            }
-          }
-        }
       },
       
       deductCredit: async (modelId) => {
@@ -816,26 +797,6 @@ export const useStore = create<AppState>()(
             _pendingRefundTokens: newTokens,
           };
         });
-        
-        // Supabase에 동기화 (세션 쿠키 기반)
-        if (state.currentUser) {
-          try {
-            await fetch('/api/wallet', {
-              method: 'POST',
-              credentials: 'include',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                credits: { [modelId]: -1 },
-                type: 'usage',
-                description: '크레딧 사용'
-              })
-            });
-          } catch (error) {
-            if (process.env.NODE_ENV !== 'production') {
-              console.error('Supabase 크레딧 사용 동기화 실패:', error);
-            }
-          }
-        }
         
         return refundToken;
       },

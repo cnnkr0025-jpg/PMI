@@ -138,6 +138,24 @@ export const Checkout: React.FC = React.memo(() => {
     };
   };
 
+  const prepareWithRetry = async (): Promise<{ orderId: string; amount: number; orderName: string; orderToken: string }> => {
+    try {
+      return await prepareSecurePayment();
+    } catch (firstErr: any) {
+      // 이단계 대응 Stage 1: 네트워크/서버 오류 시 1회 자동 재시도
+      const isNetworkLike = firstErr?.message?.toLowerCase().includes('fetch') ||
+        firstErr?.message?.toLowerCase().includes('network') ||
+        firstErr?.message?.toLowerCase().includes('failed');
+      if (isNetworkLike) {
+        const stage1ToastId = toast.loading('결제 서버와 연결 중... 잠시만 기다려주세요.', { duration: 8000 });
+        await new Promise(r => setTimeout(r, 2000));
+        toast.dismiss(stage1ToastId);
+        return await prepareSecurePayment(); // Stage 1 재시도 (실패 시 상위에서 Stage 2 처리)
+      }
+      throw firstErr;
+    }
+  };
+
   const startTossPayment = async (method: 'CARD' | 'TRANSFER') => {
     try {
       const clientKey = process.env.NEXT_PUBLIC_TOSS_CLIENT_KEY as string | undefined;
@@ -151,7 +169,7 @@ export const Checkout: React.FC = React.memo(() => {
         return;
       }
 
-      const preparedOrder = await prepareSecurePayment();
+      const preparedOrder = await prepareWithRetry();
 
       const tossPayments = tossInstanceRef.current || await loadTossPayments(clientKey);
       await tossPayments.requestPayment(method, {
@@ -166,7 +184,17 @@ export const Checkout: React.FC = React.memo(() => {
       if (process.env.NODE_ENV !== 'production') {
         console.error('Toss payment start error:', error);
       }
-      toast.error('결제 시작에 실패했습니다.');
+      // 이단계 대응 Stage 2: 구체적 이유 안내
+      const reason = error?.message || '';
+      if (reason.includes('인증') || reason.includes('auth')) {
+        toast.error('로그인이 만료됐어요. 다시 로그인 후 결제해주세요.');
+      } else if (reason.includes('네트워크') || reason.includes('network') || reason.includes('fetch')) {
+        toast.error('인터넷 연결을 확인하고 다시 시도해주세요.');
+      } else if (reason) {
+        toast.error(`결제 시작에 실패했습니다: ${reason}`);
+      } else {
+        toast.error('결제 시작에 실패했습니다. 잠시 후 다시 시도해주세요.');
+      }
       setIsProcessing(false);
     }
   };
@@ -184,7 +212,7 @@ export const Checkout: React.FC = React.memo(() => {
         return;
       }
 
-      const preparedOrder = await prepareSecurePayment();
+      const preparedOrder = await prepareWithRetry();
 
       const tossPayments = tossInstanceRef.current || await loadTossPayments(clientKey);
       await tossPayments.requestPayment('EASY_PAY' as any, {
@@ -200,7 +228,17 @@ export const Checkout: React.FC = React.memo(() => {
       if (process.env.NODE_ENV !== 'production') {
         console.error('KakaoPay start error:', error);
       }
-      toast.error('카카오페이 시작에 실패했습니다.');
+      // 이단계 대응 Stage 2: 구체적 이유 안내
+      const reason = error?.message || '';
+      if (reason.includes('인증') || reason.includes('auth')) {
+        toast.error('로그인이 만료됐어요. 다시 로그인 후 결제해주세요.');
+      } else if (reason.includes('네트워크') || reason.includes('network') || reason.includes('fetch')) {
+        toast.error('인터넷 연결을 확인하고 다시 시도해주세요.');
+      } else if (reason) {
+        toast.error(`카카오페이 시작에 실패했습니다: ${reason}`);
+      } else {
+        toast.error('카카오페이 시작에 실패했습니다. 잠시 후 다시 시도해주세요.');
+      }
       setIsProcessing(false);
     }
   };
@@ -215,7 +253,7 @@ export const Checkout: React.FC = React.memo(() => {
     setIsProcessing(true);
     try {
       // 임시 결제 모드: 실결제 없이 준비된 주문을 바로 성공 페이지로 전달
-      const preparedOrder = await prepareSecurePayment();
+      const preparedOrder = await prepareWithRetry();
       const searchParams = new URLSearchParams({
         paymentKey: `mock_${preparedOrder.orderId}`,
         orderId: preparedOrder.orderId,
@@ -223,7 +261,14 @@ export const Checkout: React.FC = React.memo(() => {
         isMockPayment: '1',
       });
       router.push(`/checkout/success?${searchParams.toString()}`);
-    } catch {
+    } catch (err: any) {
+      // 이단계 대응 Stage 2: prepareWithRetry 2회 모두 실패 시 안내
+      const reason = err?.message || '';
+      if (reason && !reason.includes('fetch') && !reason.includes('network')) {
+        toast.error(`결제 준비에 실패했습니다: ${reason}`);
+      } else {
+        toast.error('결제 준비 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
+      }
       setIsProcessing(false);
     }
   };

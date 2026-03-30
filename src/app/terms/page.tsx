@@ -77,12 +77,24 @@ export default function TermsPage() {
               <li>서비스에서 제공되는 AI의 응답, 결과물, 추천 내용은 참고용 정보입니다.</li>
               <li>AI의 결과는 오류, 부정확성, 한계가 존재할 수 있으며 회사는 결과의 정확성, 완전성, 신뢰성을 보장하지 않습니다.</li>
               <li>이용자는 AI 결과를 최종 판단의 근거로 단독 사용해서는 안 되며, 그에 따른 책임은 전적으로 이용자에게 있습니다.</li>
-              <li>AI 체인 기능에서는 마지막 단계를 제외한 각 단계의 최대 출력 토큰이 다음 단계 모델의 최대 입력 한도와 동일하거나 그 이하로 자동 제한될 수 있습니다.</li>
             </ul>
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold text-gray-900 mb-3">제7조 (이용 제한 및 계정 정지)</h2>
+            <h2 className="text-xl font-semibold text-gray-900 mb-3">제7조 (PMC — Pick-My-Coin)</h2>
+            <p className="mb-2">PMC(Pick-My-Coin)는 Pick-My-AI 서비스 내에서만 사용할 수 있는 포인트입니다.</p>
+            <ul className="list-disc pl-6 space-y-2">
+              <li>PMC는 AI 모델 구매 시 할인에 사용하거나 일부 유료 기능 구매에 사용할 수 있습니다.</li>
+              <li>PMC는 현금으로 환전되거나 제3자에게 양도될 수 없습니다.</li>
+              <li>PMC는 적립일로부터 일정 기간 내 유효하며, 만료된 PMC는 자동 소멸됩니다.</li>
+              <li>회사는 서비스 정책에 따라 PMC 적립 비율, 사용 조건, 유효 기간 등을 변경할 수 있으며, 변경 시 서비스 내 공지를 통해 사전 안내합니다.</li>
+              <li>부정한 방법으로 PMC를 취득하거나 사용하는 경우 해당 PMC는 환수될 수 있으며 계정 이용이 제한될 수 있습니다.</li>
+              <li>서비스 탈퇴 시 잔여 PMC는 소멸되며 환급되지 않습니다.</li>
+            </ul>
+          </section>
+
+          <section>
+            <h2 className="text-xl font-semibold text-gray-900 mb-3">제8조 (이용 제한 및 계정 정지)</h2>
             <p className="mb-2">회사는 다음 각 호에 해당하는 경우 사전 통보 없이 서비스 이용을 제한하거나 계정을 정지할 수 있습니다.</p>
             <ul className="list-disc pl-6 space-y-2">
               <li>서비스의 정상적인 운영을 방해하는 경우</li>
@@ -92,7 +104,7 @@ export default function TermsPage() {
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold text-gray-900 mb-3">제8조 (면책 조항)</h2>
+            <h2 className="text-xl font-semibold text-gray-900 mb-3">제9조 (면책 조항)</h2>
             <ul className="list-disc pl-6 space-y-2">
               <li>회사는 천재지변, 시스템 장애 등 불가항력 사유로 인한 서비스 중단에 대해 책임을 지지 않습니다.</li>
               <li>회사는 이용자가 서비스를 이용하여 얻은 정보로 인해 발생한 손해에 대해 책임을 지지 않습니다.</li>
@@ -100,7 +112,7 @@ export default function TermsPage() {
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold text-gray-900 mb-3">제9조 (준거법 및 관할)</h2>
+            <h2 className="text-xl font-semibold text-gray-900 mb-3">제10조 (준거법 및 관할)</h2>
             <p>본 약관은 대한민국 법을 준거법으로 하며, 서비스와 관련된 분쟁은 회사의 본점 소재지를 관할하는 법원을 전속 관할로 합니다.</p>
           </section>
 

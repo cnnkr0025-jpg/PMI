@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic';
 import { useStore } from '@/store';
 import { shallow } from 'zustand/shallow';
 import { Button } from '@/components/ui/Button';
-import { Plus, Settings, LayoutDashboard, Trash2, X, Download, Pencil, Check, Bot, Paperclip, ChevronRight, AlertCircle, MessageSquare, GitCompare, UserCircle, Copy, Square, Star, Volume2, RefreshCw, Search, FileText, Link2, Swords, Sparkles } from 'lucide-react';
+import { Plus, Settings, LayoutDashboard, Trash2, X, Download, Pencil, Check, Bot, Paperclip, ChevronRight, AlertCircle, MessageSquare, GitCompare, UserCircle, Copy, Square, Star, Volume2, RefreshCw, Search, FileText, Swords, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/utils/cn';
 import { useRouter } from 'next/navigation';
@@ -443,7 +443,6 @@ export const Chat: React.FC = () => {
   const [showTemplates, setShowTemplates] = useState(false);
   const [showPersona, setShowPersona] = useState(false);
   const [showComparison, setShowComparison] = useState(false);
-  const [showChainMode, setShowChainMode] = useState(false);
   const [showDebateMode, setShowDebateMode] = useState(false);
   const [showBookmarks, setShowBookmarks] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -502,6 +501,8 @@ export const Chat: React.FC = () => {
     speechLevel,
     sendButtonSymbol,
     sendButtonSound,
+    usePMC,
+    getAvailablePMC,
   } = useStore(
     (state) => ({
       chatSessions: state.chatSessions,
@@ -534,6 +535,8 @@ export const Chat: React.FC = () => {
       speechLevel: state.speechLevel,
       sendButtonSymbol: state.sendButtonSymbol,
       sendButtonSound: state.sendButtonSound,
+      usePMC: state.usePMC,
+      getAvailablePMC: state.getAvailablePMC,
     }),
     shallow
   );
@@ -768,9 +771,11 @@ export const Chat: React.FC = () => {
 
   const currentMessages = useMemo<ChatMessage[]>(() => currentSession?.messages || [], [currentSession]);
 
-  // Clear per-session summaries when switching sessions to free memory
+  const sessionSummariesRef = useRef<Map<string, ConversationSummary[]>>(new Map());
+
+  // Restore per-session summaries when switching sessions
   useEffect(() => {
-    setConversationSummaries([]);
+    setConversationSummaries(sessionSummariesRef.current.get(currentSessionId || '') || []);
   }, [currentSessionId]);
 
   const modelById = useMemo(() => {
@@ -1288,10 +1293,23 @@ export const Chat: React.FC = () => {
       flushDraftMessage(extracted.displayText, true);
       finalizeMessageContent(currentSessionId, lastAssistant.id, extracted.displayText);
     } catch (e: any) {
-      if (e?.message !== 'ERR_CANCELLED' && regenerateRefundToken) {
+      const regenErrorCode: string = e?.name === 'AbortError' ? 'ERR_CANCELLED' : (e?.message || 'ERR_UNKNOWN');
+      const isAborted = regenErrorCode === 'ERR_CANCELLED';
+
+      // AI 재생성은 API 중복 호출 방지를 위해 자동 재시도 없음
+      if (!isAborted && regenerateRefundToken) {
         refundCredit(targetModelId, targetPiWon, regenerateRefundToken);
       }
-      if (e.name !== 'AbortError') toast.error('재생성에 실패했습니다.');
+      if (!isAborted) {
+        const regenMsgMap: Record<string, string> = {
+          ERR_TIMEOUT: '응답 시간이 초과됐어요. 잠시 후 다시 시도해주세요.',
+          ERR_AUTH: '로그인이 필요해요. 다시 로그인 후 시도해주세요.',
+          ERR_CREDIT_00: '크레딧 처리 중 문제가 발생했어요.',
+        };
+        const regenMsg = Object.entries(regenMsgMap).find(([k]) => regenErrorCode.startsWith(k))?.[1]
+          ?? (regenErrorCode.startsWith('ERR_NET') ? '연결 오류가 발생했어요. 잠시 후 다시 시도해주세요.' : '재생성에 실패했습니다. 크레딧 1회 환불됩니다.');
+        toast.error(regenMsg);
+      }
     } finally {
       clearDraftMessage();
       setIsLoading(false);
@@ -1327,6 +1345,24 @@ export const Chat: React.FC = () => {
     if (credits <= 0) {
       toast.error(`${selectedModel.displayName} 크레딧이 부족합니다.`);
       return;
+    }
+
+    // 60개 메시지마다 25 PMC 추가 요금 확인
+    const sessionMsgCount = currentMessages.length;
+    const EXTRA_CHARGE_THRESHOLD = 60;
+    const EXTRA_CHARGE_PMC = 25;
+    if (sessionMsgCount > 0 && sessionMsgCount % EXTRA_CHARGE_THRESHOLD === 0) {
+      const availPMC = getAvailablePMC();
+      if (availPMC < EXTRA_CHARGE_PMC) {
+        toast.error(`긴 대화 추가 요금: ${EXTRA_CHARGE_PMC} PMC가 필요합니다. (현재 잔여 ${availPMC} PMC)`);
+        return;
+      }
+      const charged = usePMC(EXTRA_CHARGE_PMC, `긴 대화 추가 요금 (${sessionMsgCount}번째 메시지)`);
+      if (!charged) {
+        toast.error('PMC 차감에 실패했습니다. 잠시 후 다시 시도해주세요.');
+        return;
+      }
+      toast.info(`긴 대화 추가 요금 ${EXTRA_CHARGE_PMC} PMC 차감됨`);
     }
 
     const chatPerfRunId = startChatPerfRun('handleSendMessage', STREAMING_DRAFT_V2);
@@ -1483,7 +1519,20 @@ export const Chat: React.FC = () => {
         return;
       }
 
-      // API 호출 (500/503 에러 시 1.5초 후 1회 자동 재시도)
+      // API 호출 (자동 재시도 없음 — 중복 API 사용 방지)
+      // 1초 딜레이: 사용자가 전송을 취소할 수 있도록 잠시 대기
+      await new Promise<void>((resolve, reject) => {
+        const delayId = setTimeout(resolve, 1000);
+        const checkCancel = setInterval(() => {
+          if (cancelRequestedRef.current) {
+            clearTimeout(delayId);
+            clearInterval(checkCancel);
+            reject(new Error('ERR_CANCELLED'));
+          }
+        }, 50);
+        setTimeout(() => clearInterval(checkCancel), 1100);
+      });
+
       const controller = new AbortController();
       abortControllerRef.current = controller;
       const requestTimeout = isVideoModel ? 300000 : 300000; // 영상: 5분, 일반: 5분
@@ -1528,16 +1577,6 @@ export const Chat: React.FC = () => {
           body: serializedRequestBody,
           signal: controller.signal
         });
-        // 500/503 서버 에러 시 1.5초 후 1회 자동 재시도
-        if ((response.status === 500 || response.status === 503) && !cancelRequestedRef.current) {
-          await new Promise(r => setTimeout(r, 1500));
-          response = await fetch('/api/chat', {
-            method: 'POST',
-            headers: requestHeaders,
-            body: serializedRequestBody,
-            signal: controller.signal
-          });
-        }
       } catch (fetchError: any) {
         clearTimeout(timeoutId);
         if (fetchError.name === 'AbortError') {
@@ -1686,7 +1725,11 @@ export const Chat: React.FC = () => {
         try {
           const { summary } = extractSummary(accumulated);
           if (summary) {
-            setConversationSummaries(prev => [...prev, summary]);
+            setConversationSummaries(prev => {
+              const next = [...prev, summary];
+              if (sessionIdForThisRequest) sessionSummariesRef.current.set(sessionIdForThisRequest, next);
+              return next;
+            });
           }
         } catch {}
         
@@ -1729,7 +1772,11 @@ export const Chat: React.FC = () => {
         try {
           const { summary } = extractSummary(data.content);
           if (summary) {
-            setConversationSummaries(prev => [...prev, summary]);
+            setConversationSummaries(prev => {
+              const next = [...prev, summary];
+              if (sessionIdForThisRequest) sessionSummariesRef.current.set(sessionIdForThisRequest, next);
+              return next;
+            });
           }
         } catch (summaryError) {
           if (process.env.NODE_ENV !== 'production') {
@@ -1864,6 +1911,8 @@ export const Chat: React.FC = () => {
         return;
       }
 
+      // AI 전송은 API 중복 호출 방지를 위해 자동 재시도 없음 → 바로 환불·에러 안내
+
       // ERR_CANCELLED가 아닌 실제 에러 시 크레딧 환불
       if (errorCode !== 'ERR_CANCELLED' && currentModelId && capturedRefundToken) {
         refundCredit(currentModelId, currentModelPiWon, capturedRefundToken);
@@ -1910,7 +1959,7 @@ export const Chat: React.FC = () => {
       if (sid) {
         let errContent;
         if (errorCode === 'ERR_CANCELLED') {
-          errContent = '<span style="color: #9ca3af; font-style: italic;">응답 중지됨</span>';
+          errContent = '<span style="color: #9ca3af;">응답 중지됨</span>';
         } else {
           errContent = `${display.icon} **${display.title}**\n\n${display.message}${errorDetail ? `\n\n**원인:** ${errorDetail}` : ''}\n\n**이렇게 해보세요:**\n${display.tips.map(t => '• ' + t).join('\n')}\n\n문제가 계속되면 **관리자에게 문의**해주세요.\n\n\`${errorCode}\``;
         }
@@ -2698,23 +2747,6 @@ export const Chat: React.FC = () => {
                             </div>
                           </button>
 
-                          {/* AI 체인 */}
-                          <button
-                            onClick={() => {
-                              setShowChainMode(true);
-                              setShowPlusMenu(false);
-                            }}
-                            className="w-full flex items-center space-x-3 px-4 py-3 hover:bg-gray-50 rounded-lg transition-colors text-left"
-                          >
-                            <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center">
-                              <Link2 className="w-5 h-5 text-orange-700" />
-                            </div>
-                            <div>
-                              <div className="text-sm font-semibold text-gray-900">AI 체인</div>
-                              <div className="text-xs text-gray-500">여러 AI가 순서대로 협업</div>
-                            </div>
-                          </button>
-
                           {/* AI 토론 */}
                           <button
                             onClick={() => {
@@ -3074,26 +3106,6 @@ export const Chat: React.FC = () => {
         </div>
       )}
 
-      {/* AI 체인 모달 */}
-      {showChainMode && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowChainMode(false)}>
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden" onClick={e => e.stopPropagation()}>
-            <div className="p-5 border-b border-gray-200 flex items-center justify-between">
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                <Link2 className="w-5 h-5 text-orange-500" />
-                AI 체인 — 여러 AI가 순서대로 협업
-              </h2>
-              <button onClick={() => setShowChainMode(false)} className="p-2 hover:bg-gray-100 rounded-full">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="overflow-y-auto max-h-[calc(90vh-80px)]">
-              <AiChainContent availableModels={availableModels} walletCredits={walletCredits || {}} modelById={modelById} onClose={() => setShowChainMode(false)} language={language} speechLevel={speechLevel} />
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* AI 토론 모달 */}
       {showDebateMode && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowDebateMode(false)}>
@@ -3125,8 +3137,6 @@ const ModelComparisonContent = dynamic(() => import('@/components/SideBySide').t
 const PersonaSettingsContent = dynamic(() => import('@/components/PersonaSettings').then(mod => ({ default: mod.PersonaSettings })), { ssr: false });
 type AiFeatureProps = { availableModels: any[]; walletCredits: { [modelId: string]: number }; modelById: Map<string, any>; onClose?: () => void; language?: string; speechLevel?: string; };
 type SmartRouterProps = { question: string; models: any[]; speechLevel?: string; language?: string; compact?: boolean; autoAnalyzeToken?: number; };
-// @ts-ignore – AiChain is a dynamic component without static type declarations
-const AiChainContent = dynamic(() => import('@/components/AiChain').then((mod: any) => ({ default: mod.AiChain })), { ssr: false }) as React.ComponentType<AiFeatureProps>;
 // @ts-ignore – AiDebate is a dynamic component without static type declarations
 const AiDebateContent = dynamic(() => import('@/components/AiDebate').then((mod: any) => ({ default: mod.AiDebate })), { ssr: false }) as React.ComponentType<AiFeatureProps>;
 const SmartRouterContent = dynamic(() => import('@/components/SmartRouter').then(mod => ({ default: mod.SmartRouter })), { ssr: false }) as React.ComponentType<SmartRouterProps>;

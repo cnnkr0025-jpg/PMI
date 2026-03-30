@@ -98,8 +98,19 @@ const nextConfig = {
         ],
       },
       {
-        // 정적 페이지 단기 CDN 캐시 (Netlify Edge에서 빠른 응답)
-        source: '/(guide|login|feedback)',
+        source: '/guide',
+        headers: [
+          { key: 'Cache-Control', value: 'public, s-maxage=120, stale-while-revalidate=3600' },
+        ],
+      },
+      {
+        source: '/login',
+        headers: [
+          { key: 'Cache-Control', value: 'public, s-maxage=60, stale-while-revalidate=3600' },
+        ],
+      },
+      {
+        source: '/feedback',
         headers: [
           { key: 'Cache-Control', value: 'public, s-maxage=60, stale-while-revalidate=3600' },
         ],

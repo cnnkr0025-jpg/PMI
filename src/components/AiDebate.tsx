@@ -1,11 +1,10 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { useStore } from '@/store';
 import { toast } from 'sonner';
-import { Play, Copy, RotateCcw, Sparkles } from 'lucide-react';
+import { Play, Copy, RotateCcw, Square } from 'lucide-react';
 import { cn } from '@/utils/cn';
-import { SmartRouter } from './SmartRouter';
 
 type Props = {
   availableModels: any[];
@@ -33,7 +32,7 @@ export const AiDebate: React.FC<Props> = ({ availableModels, walletCredits, mode
   const [messages, setMessages] = useState<DebateMessage[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const [conclusion, setConclusion] = useState('');
-  const [lastAnalyzedTopic, setLastAnalyzedTopic] = useState('');
+  const abortRef = useRef<AbortController | null>(null);
 
   const textModels = availableModels.filter(m =>
     m.series !== 'image' && m.series !== 'video' && !m.isBatch
@@ -41,33 +40,47 @@ export const AiDebate: React.FC<Props> = ({ availableModels, walletCredits, mode
 
   const totalCost = rounds * 2 + 1;
 
-  const callModel = async (modelId: string, messages: { role: string; content: string }[]) => {
+  const callModel = async (modelId: string, msgs: { role: string; content: string }[], signal: AbortSignal) => {
     const res = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        messages,
+        messages: msgs,
         modelId,
         language: language || 'ko',
         speechLevel: speechLevel || 'formal',
         temperature: 0.8,
       }),
+      signal,
     });
-    if (!res.ok) throw new Error('API 오류');
+    if (!res.ok) {
+      if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
+      throw new Error('API 오류');
+    }
     const data = await res.json();
     return data.content || '';
   };
+
+  const handleStop = useCallback(() => {
+    if (abortRef.current) {
+      abortRef.current.abort();
+      abortRef.current = null;
+    }
+  }, []);
 
   const handleRun = useCallback(async () => {
     if (!topic.trim()) { toast.error('토론 주제를 입력해주세요.'); return; }
     if (!modelA || !modelB) { toast.error('두 AI를 모두 선택해주세요.'); return; }
     if (modelA === modelB) { toast.error('서로 다른 AI를 선택해주세요.'); return; }
-    if (lastAnalyzedTopic === topic.trim()) { toast.error('이미 분석한 질문입니다. 다른 주제로 변경해주세요.'); return; }
 
     const creditsA = walletCredits[modelA] || 0;
     const creditsB = walletCredits[modelB] || 0;
     if (creditsA < rounds + 1) { toast.error(`${modelById.get(modelA)?.displayName} 크레딧이 부족합니다.`); return; }
     if (creditsB < rounds) { toast.error(`${modelById.get(modelB)?.displayName} 크레딧이 부족합니다.`); return; }
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const signal = controller.signal;
 
     setIsRunning(true);
     setMessages([]);
@@ -84,7 +97,8 @@ export const AiDebate: React.FC<Props> = ({ availableModels, walletCredits, mode
 
     try {
       for (let round = 1; round <= rounds; round++) {
-        // A의 주장
+        if (signal.aborted) break;
+
         const aHistoryMsgs = debateHistory.map(m => ({
           role: 'user' as const,
           content: `[${m.side === 'A' ? modelAName : modelBName}의 ${m.round}라운드 주장]\n${m.content}`
@@ -97,15 +111,14 @@ export const AiDebate: React.FC<Props> = ({ availableModels, walletCredits, mode
         addMessage({ modelId: modelA, side: 'A', round, content: '', loading: true });
         deductCredit(modelA).catch(() => {});
 
-        const aContent = await callModel(modelA, [
-          ...aHistoryMsgs,
-          { role: 'user', content: aPrompt }
-        ]);
+        const aContent = await callModel(modelA, [...aHistoryMsgs, { role: 'user', content: aPrompt }], signal);
+        if (signal.aborted) break;
 
         debateHistory[debateHistory.length - 1] = { modelId: modelA, side: 'A', round, content: aContent };
         setMessages([...debateHistory]);
 
-        // B의 반박
+        if (signal.aborted) break;
+
         const bHistoryMsgs = debateHistory.map(m => ({
           role: 'user' as const,
           content: `[${m.side === 'A' ? modelAName : modelBName}의 ${m.round}라운드 주장]\n${m.content}`
@@ -116,33 +129,40 @@ export const AiDebate: React.FC<Props> = ({ availableModels, walletCredits, mode
         addMessage({ modelId: modelB, side: 'B', round, content: '', loading: true });
         deductCredit(modelB).catch(() => {});
 
-        const bContent = await callModel(modelB, [
-          ...bHistoryMsgs,
-          { role: 'user', content: bPrompt }
-        ]);
+        const bContent = await callModel(modelB, [...bHistoryMsgs, { role: 'user', content: bPrompt }], signal);
+        if (signal.aborted) break;
 
         debateHistory[debateHistory.length - 1] = { modelId: modelB, side: 'B', round, content: bContent };
         setMessages([...debateHistory]);
       }
 
-      // 결론 (A가 최종 정리)
-      const allHistory = debateHistory.map(m => ({
-        role: 'user' as const,
-        content: `[${m.side === 'A' ? modelAName : modelBName}의 ${m.round}라운드]\n${m.content}`
-      }));
+      if (!signal.aborted) {
+        const allHistory = debateHistory.map(m => ({
+          role: 'user' as const,
+          content: `[${m.side === 'A' ? modelAName : modelBName}의 ${m.round}라운드]\n${m.content}`
+        }));
 
-      deductCredit(modelA).catch(() => {});
-      const conclusionContent = await callModel(modelA, [
-        ...allHistory,
-        { role: 'user', content: `위의 토론을 종합하여 "${topic}"에 대한 균형 잡힌 최종 결론을 5-6문장으로 내려주세요. 양측 논거를 공정하게 정리하고 핵심 인사이트를 도출해주세요.` }
-      ]);
+        deductCredit(modelA).catch(() => {});
+        const conclusionContent = await callModel(modelA, [
+          ...allHistory,
+          { role: 'user', content: `위의 토론을 종합하여 "${topic}"에 대한 균형 잡힌 최종 결론을 5-6문장으로 내려주세요. 양측 논거를 공정하게 정리하고 핵심 인사이트를 도출해주세요.` }
+        ], signal);
 
-      setConclusion(conclusionContent);
-      setLastAnalyzedTopic(topic.trim());
-      toast.success('토론이 완료되었습니다! 🏆');
+        if (!signal.aborted) {
+          setConclusion(conclusionContent);
+          toast.success('토론이 완료되었습니다.');
+        }
+      } else {
+        toast.info('토론이 중단되었습니다.');
+      }
     } catch (e: any) {
-      toast.error('토론 중 오류가 발생했습니다.');
+      if (e?.name === 'AbortError' || signal.aborted) {
+        toast.info('토론이 중단되었습니다.');
+      } else {
+        toast.error('토론 중 오류가 발생했습니다.');
+      }
     } finally {
+      abortRef.current = null;
       setIsRunning(false);
     }
   }, [topic, modelA, modelB, rounds, walletCredits, modelById, deductCredit, language, speechLevel]);
@@ -158,17 +178,17 @@ export const AiDebate: React.FC<Props> = ({ availableModels, walletCredits, mode
   return (
     <div className="p-5">
       <div className="mb-4 p-3 bg-red-50 rounded-xl text-sm text-red-700 border border-red-200">
-        ⚔️ 두 AI가 주제에 대해 찬반으로 나뉘어 실제 토론합니다. 총 {totalCost}회 크레딧이 차감됩니다.
+        두 AI가 주제에 대해 찬반으로 나뉘어 실제 토론합니다. 총 {totalCost}회 크레딧이 차감됩니다.
       </div>
 
-      {/* 설정 */}
       <div className="grid grid-cols-2 gap-4 mb-4">
         <div>
           <label className="text-xs font-semibold text-gray-600 mb-1 block">찬성 측 AI</label>
           <select
             value={modelA}
             onChange={e => setModelA(e.target.value)}
-            className="w-full text-sm px-3 py-2 border border-gray-300 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-red-400"
+            disabled={isRunning}
+            className="w-full text-sm px-3 py-2 border border-gray-300 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-red-400 disabled:opacity-50"
           >
             <option value="">선택...</option>
             {textModels.map(m => (
@@ -181,7 +201,8 @@ export const AiDebate: React.FC<Props> = ({ availableModels, walletCredits, mode
           <select
             value={modelB}
             onChange={e => setModelB(e.target.value)}
-            className="w-full text-sm px-3 py-2 border border-gray-300 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-red-400"
+            disabled={isRunning}
+            className="w-full text-sm px-3 py-2 border border-gray-300 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-red-400 disabled:opacity-50"
           >
             <option value="">선택...</option>
             {textModels.map(m => (
@@ -192,14 +213,15 @@ export const AiDebate: React.FC<Props> = ({ availableModels, walletCredits, mode
       </div>
 
       <div className="mb-4">
-        <label className="text-xs font-semibold text-gray-600 mb-1 block">라운드 수 (각 AI가 몇 번 주장할지)</label>
+        <label className="text-xs font-semibold text-gray-600 mb-1 block">라운드 수</label>
         <input
           type="number"
           min={1}
           max={5}
           value={rounds}
           onChange={e => setRounds(Math.max(1, Math.min(5, Number(e.target.value))))}
-          className="w-24 text-sm px-3 py-2 border border-gray-300 rounded-xl focus:outline-none"
+          disabled={isRunning}
+          className="w-24 text-sm px-3 py-2 border border-gray-300 rounded-xl focus:outline-none disabled:opacity-50"
         />
         <span className="ml-2 text-xs text-gray-500">총 {totalCost}회 크레딧 차감</span>
       </div>
@@ -208,29 +230,12 @@ export const AiDebate: React.FC<Props> = ({ availableModels, walletCredits, mode
         <textarea
           value={topic}
           onChange={e => setTopic(e.target.value)}
-          placeholder="토론 주제를 입력하세요. (예: 'AI가 인간의 일자리를 빼앗을 것인가?')"
-          className="w-full px-4 py-3 border border-gray-300 rounded-xl text-sm resize-none focus:outline-none focus:ring-2 focus:ring-red-400"
+          placeholder="토론 주제를 입력하세요. (예: AI가 인간의 일자리를 빼앗을 것인가?)"
+          disabled={isRunning}
+          className="w-full px-4 py-3 border border-gray-300 rounded-xl text-sm resize-none focus:outline-none focus:ring-2 focus:ring-red-400 disabled:opacity-50"
           rows={2}
         />
       </div>
-
-      {/* 질문 분석 */}
-      {topic.trim() && (
-        <div className="mb-4">
-          <SmartRouter
-            question={topic}
-            models={availableModels}
-            speechLevel={speechLevel}
-            language={language}
-            compact={true}
-          />
-          {lastAnalyzedTopic === topic.trim() && (
-            <div className="mt-2 text-xs text-amber-600 bg-amber-50 px-3 py-2 rounded-lg">
-              ⚠️ 이미 분석한 질문입니다. 다른 주제로 변경해주세요.
-            </div>
-          )}
-        </div>
-      )}
 
       <div className="flex gap-2 mb-5">
         <button
@@ -241,6 +246,15 @@ export const AiDebate: React.FC<Props> = ({ availableModels, walletCredits, mode
           <Play className="w-4 h-4" />
           {isRunning ? '토론 진행 중...' : '토론 시작'}
         </button>
+        {isRunning && (
+          <button
+            onClick={handleStop}
+            className="flex items-center gap-2 px-4 py-2.5 bg-gray-800 text-white rounded-xl text-sm font-medium hover:bg-gray-700 transition-colors"
+          >
+            <Square className="w-4 h-4" />
+            중단
+          </button>
+        )}
         {messages.length > 0 && !isRunning && (
           <button onClick={handleReset} className="flex items-center gap-2 px-4 py-2.5 bg-gray-100 text-gray-700 rounded-xl text-sm hover:bg-gray-200 transition-colors">
             <RotateCcw className="w-4 h-4" />초기화
@@ -248,10 +262,8 @@ export const AiDebate: React.FC<Props> = ({ availableModels, walletCredits, mode
         )}
       </div>
 
-      {/* 토론 내용 */}
       {messages.length > 0 && (
         <div className="space-y-3">
-          {/* 헤더 */}
           <div className="flex gap-2 text-xs font-semibold">
             <div className="flex-1 text-center py-1 bg-blue-100 text-blue-700 rounded-lg">{modelAName} (찬성)</div>
             <div className="flex-1 text-center py-1 bg-red-100 text-red-700 rounded-lg">{modelBName} (반대)</div>
@@ -287,14 +299,13 @@ export const AiDebate: React.FC<Props> = ({ availableModels, walletCredits, mode
             );
           })}
 
-          {/* 최종 결론 */}
           {conclusion && (
-            <div className="mt-4 p-4 bg-yellow-50 border-2 border-yellow-400 rounded-xl">
-              <div className="text-sm font-bold text-yellow-700 mb-2">🏆 최종 결론</div>
-              <div className="text-sm text-gray-800 whitespace-pre-wrap">{conclusion}</div>
+            <div className="mt-4 p-4 bg-gray-50 border border-gray-300 rounded-xl">
+              <div className="text-sm font-bold text-gray-800 mb-2">최종 결론</div>
+              <div className="text-sm text-gray-700 whitespace-pre-wrap">{conclusion}</div>
               <button
-                onClick={() => { navigator.clipboard.writeText(conclusion); toast.success('복사했습니다!'); }}
-                className="mt-2 text-xs text-yellow-600 flex items-center gap-1"
+                onClick={() => { navigator.clipboard.writeText(conclusion); toast.success('복사했습니다.'); }}
+                className="mt-2 text-xs text-gray-500 flex items-center gap-1 hover:text-gray-700"
               >
                 <Copy className="w-3 h-3" />복사
               </button>

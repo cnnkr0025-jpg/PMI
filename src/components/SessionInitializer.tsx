@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useStore } from '@/store';
 import { initializeRealtimeSync, unsubscribeFromRealtimeUpdates } from '@/lib/realtimeSync';
 
@@ -11,6 +11,8 @@ import { initializeRealtimeSync, unsubscribeFromRealtimeUpdates } from '@/lib/re
  */
 export function SessionInitializer() {
   const checkedRef = useRef(false);
+  const routesWarmedRef = useRef(false);
+  const router = useRouter();
   const isAuthenticated = useStore((s) => s.isAuthenticated);
   const pathname = usePathname();
   const isProtectedPath = Boolean(pathname && ['/chat', '/dashboard', '/settings', '/configurator', '/checkout', '/feedback'].some((route) => pathname.startsWith(route)));
@@ -280,6 +282,28 @@ export function SessionInitializer() {
 
     return () => { cancelFn?.(); };
   }, [isAuthenticated, isProtectedPath]);
+
+  // 로그인 직후(또는 세션 복원 직후) 구매·대시보드·채팅 RSC·JS 청크 선제 로드 → 탭 클릭 체감 속도
+  useEffect(() => {
+    if (!isAuthenticated) {
+      routesWarmedRef.current = false;
+      return;
+    }
+    if (routesWarmedRef.current) return;
+    routesWarmedRef.current = true;
+
+    router.prefetch('/configurator');
+    router.prefetch('/dashboard');
+    router.prefetch('/chat');
+    router.prefetch('/feedback');
+    router.prefetch('/settings');
+
+    void Promise.all([
+      import('@/components/Configurator'),
+      import('@/components/Dashboard'),
+      import('@/components/Chat'),
+    ]);
+  }, [isAuthenticated, router]);
 
   // 컴포넌트 언마운트 시 Realtime 구독 해제
   useEffect(() => {

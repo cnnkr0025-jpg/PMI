@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import { Sparkles, Loader2, Lock } from 'lucide-react';
+import { Loader2, Lock } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { useStore } from '@/store';
 import { shallow } from 'zustand/shallow';
@@ -103,17 +103,17 @@ export const SmartRouter: React.FC<Props> = ({ question, models, speechLevel, la
   if (!question.trim() || models.length === 0) return null;
 
   return (
-    <div className={cn('rounded-xl border bg-gradient-to-r from-indigo-50 to-purple-50 border-indigo-200', compact ? 'p-2' : 'p-3')}>
+    <div className={cn('rounded-lg border border-gray-200', compact ? 'p-2' : 'p-3')}>
       <div className="flex items-center gap-2 flex-wrap">
         <button
           onClick={() => handleAnalyze(false)}
           disabled={loading}
           className={cn(
-            'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors',
-            'bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed'
+            'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
+            'bg-gray-900 text-white hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed'
           )}
         >
-          {loading && !isPremium ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+          {loading && !isPremium ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
           질문 분석하기
         </button>
 
@@ -122,23 +122,23 @@ export const SmartRouter: React.FC<Props> = ({ question, models, speechLevel, la
             onClick={() => handleAnalyze(true)}
             disabled={loading}
             className={cn(
-              'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors',
-              'bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-60 disabled:cursor-not-allowed'
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
+              'bg-gray-600 text-white hover:bg-gray-500 disabled:opacity-50 disabled:cursor-not-allowed'
             )}
           >
-            {loading && isPremium ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+            {loading && isPremium ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
             5위 상세 분석{!smartRouterPurchased && !smartRouterFreeUsed ? ' (최초 1회 무료)' : ''}
           </button>
         ) : (
-          <span className="flex items-center gap-1 text-xs text-gray-500">
+          <span className="flex items-center gap-1 text-xs text-gray-400">
             <Lock className="w-3 h-3" />5위 분석 (구매페이지 &gt; 기타)
           </span>
         )}
       </div>
 
       {recommendation && (
-        <div className={cn('mt-2 text-sm text-gray-800', isPremium ? 'whitespace-pre-wrap' : '')}>
-          <span className="font-semibold text-indigo-600">추천</span>{' '}
+        <div className={cn('mt-2 text-sm text-gray-700 border-t border-gray-100 pt-2', isPremium ? 'whitespace-pre-wrap' : '')}>
+          <span className="font-semibold text-gray-900">추천</span>{' '}
           {recommendation}
         </div>
       )}

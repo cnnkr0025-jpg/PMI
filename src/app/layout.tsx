@@ -82,11 +82,11 @@ const PREFETCH_SCRIPT = `(function(){
   // idle 상태에서 핵심 라우트 선제 프리페치
   var idle=typeof requestIdleCallback!=='undefined'?requestIdleCallback:function(cb){setTimeout(cb,200)};
   idle(function(){
-    // 세션 쿠키 유무로 로그인 상태 간이 판단
+    // 세션 쿠키 유무로 로그인 상태 간이 판단 — 구매/대시보드 먼저(document prefetch 순서)
     var loggedIn=document.cookie.indexOf('session=')!==-1;
-    var routes=loggedIn?['/chat','/configurator','/dashboard']:['/guide','/login'];
+    var routes=loggedIn?['/configurator','/dashboard','/chat','/feedback']:['/guide','/login'];
     routes.forEach(p);
-  },{timeout:2000});
+  },{timeout:400});
 })();`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -172,6 +172,14 @@ export async function middleware(request: NextRequest) {
     return new NextResponse(null, { status: 404 });
   }
 
+  // 홈: Edge에서 즉시 분기 — `/` RSC·cookies() 처리 없이 리다이렉트만 (첫 방문 체감 속도)
+  if (pathname === '/' || pathname === '') {
+    const hasSession = Boolean(request.cookies.get('session')?.value);
+    const url = request.nextUrl.clone();
+    url.pathname = hasSession ? '/chat' : '/guide';
+    return stripServerHeaders(NextResponse.redirect(url));
+  }
+
   // 보호된 경로 정의 (악성 UA / 버스트 체크 전에 먼저 일반 경로 조기 반환)
   const protectedPaths = ['/chat', '/dashboard', '/settings', '/configurator', '/checkout', '/feedback'];
   const isProtectedPath = protectedPaths.some(p => pathname.startsWith(p));

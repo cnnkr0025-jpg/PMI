@@ -25,22 +25,55 @@ export const Auth: React.FC<AuthProps> = ({ onSuccess, defaultMode = 'login' }) 
 
     setIsLoading(true);
 
-    try {
+    const tryOAuth = async () => {
       const redirectUrl = getBaseUrl();
-
-      const { error } = await supabase.auth.signInWithOAuth({
+      return supabase.auth.signInWithOAuth({
         provider: 'google',
-        options: {
-          redirectTo: `${redirectUrl}/auth/callback`,
-        },
+        options: { redirectTo: `${redirectUrl}/auth/callback` },
       });
+    };
+
+    try {
+      const { error } = await tryOAuth();
 
       if (error) {
-        toast.error(error.message || '로그인에 실패했습니다.');
+        const isNetworkError = error.message?.toLowerCase().includes('network') || error.message?.toLowerCase().includes('fetch');
+
+        if (isNetworkError) {
+          // 이단계 대응 Stage 1: 네트워크 오류 시 1회 자동 재시도
+          const stage1ToastId = toast.loading('연결에 문제가 발생했어요. 다시 시도합니다...', { duration: 6000 });
+          await new Promise(r => setTimeout(r, 2000));
+          toast.dismiss(stage1ToastId);
+
+          try {
+            const { error: retryError } = await tryOAuth();
+            if (!retryError) return; // Stage 1 재시도 성공 (리다이렉트 진행 중)
+            // Stage 2: 재시도도 실패
+            toast.error('인터넷 연결을 확인하고 다시 시도해주세요.');
+          } catch {
+            toast.error('인터넷 연결을 확인하고 다시 시도해주세요.');
+          }
+        } else {
+          // 이단계 대응 Stage 2: 비네트워크 오류는 구체적 메시지 표시
+          toast.error(error.message || '로그인에 실패했습니다. 잠시 후 다시 시도해주세요.');
+        }
         setIsLoading(false);
       }
     } catch (err: any) {
-      toast.error(err.message || '오류가 발생했습니다.');
+      // 이단계 대응 Stage 1: 예외 발생 시 1회 자동 재시도
+      const stage1ToastId = toast.loading('로그인 중 문제가 발생했어요. 다시 시도합니다...', { duration: 6000 });
+      await new Promise(r => setTimeout(r, 2000));
+      toast.dismiss(stage1ToastId);
+
+      try {
+        const { error: retryError } = await tryOAuth();
+        if (!retryError) return; // Stage 1 재시도 성공
+        // Stage 2: 재시도 실패
+        toast.error(retryError.message || '로그인에 실패했습니다. 잠시 후 다시 시도해주세요.');
+      } catch {
+        // Stage 2: 최종 에러 표시
+        toast.error(err.message || '로그인 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
+      }
       setIsLoading(false);
     }
   }, [agreedToTerms]);

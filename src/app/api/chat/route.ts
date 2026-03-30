@@ -249,7 +249,7 @@ async function callImageGeneration(prompt: string, model: string): Promise<strin
         prompt: prompt,
         n: 1,
         size: '1024x1024',
-        quality: model === 'gpt-image-1' ? 'hd' : 'standard'
+        quality: model === 'gpt-image-1' ? 'auto' : 'standard'
       })
     }, {
       timeout: DEFAULT_API_TIMEOUT_MS,
