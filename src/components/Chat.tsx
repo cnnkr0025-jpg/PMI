@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic';
 import { useStore } from '@/store';
 import { shallow } from 'zustand/shallow';
 import { Button } from '@/components/ui/Button';
-import { Plus, Settings, LayoutDashboard, Trash2, X, Download, Pencil, Check, Bot, Paperclip, ChevronRight, AlertCircle, MessageSquare, GitCompare, UserCircle, Copy, Square, Star, Volume2, RefreshCw, Search, FileText, Swords, Sparkles } from 'lucide-react';
+import { Plus, Settings, LayoutDashboard, Trash2, X, Download, Pencil, Check, Bot, Paperclip, ChevronRight, AlertCircle, MessageSquare, GitCompare, UserCircle, Copy, Square, Star, Volume2, RefreshCw, Search, FileText, Swords, Sparkles, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/utils/cn';
 import { useRouter } from 'next/navigation';
@@ -445,6 +445,7 @@ export const Chat: React.FC = () => {
   const [showComparison, setShowComparison] = useState(false);
   const [showDebateMode, setShowDebateMode] = useState(false);
   const [showBookmarks, setShowBookmarks] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
   const [showSmartRouterPanel, setShowSmartRouterPanel] = useState(false);
@@ -2326,7 +2327,7 @@ export const Chat: React.FC = () => {
       {/* 사이드바 */}
       {wrapWithProfiler(
         'ChatSidebar',
-        <div className="w-64 flex-shrink-0 bg-[#f9f9f9] dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col chat-list-card">
+        <div className={cn("flex-shrink-0 bg-[#f9f9f9] dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col chat-list-card transition-all duration-200", sidebarOpen ? "w-64" : "w-0 overflow-hidden border-r-0")}>
         {/* 새 채팅 버튼 */}
         <div className="p-2 space-y-1">
           <button
@@ -2478,7 +2479,17 @@ export const Chat: React.FC = () => {
       )}
       
       {/* 메인 채팅 영역 */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* 사이드바 토글 버튼 */}
+        <div className="absolute top-[3.5rem] left-0 z-10 p-1">
+          <button
+            onClick={() => setSidebarOpen(v => !v)}
+            className="p-1.5 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            title={sidebarOpen ? '사이드바 닫기' : '사이드바 열기'}
+          >
+            {sidebarOpen ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeftOpen className="w-4 h-4" />}
+          </button>
+        </div>
         {/* 메시지 영역 */}
         {wrapWithProfiler(
           'ChatMessages',
@@ -2956,6 +2967,11 @@ export const Chat: React.FC = () => {
                 {message.length} / {selectedModelMaxCharacters}{t.chat.characterCount}
               </div>
             )}
+
+            {/* AI 면책 안내 */}
+            <div className="mt-1 text-center text-[11px] text-gray-400">
+              AI는 틀릴 수 있어요. 중요한 정보는 직접 확인해 주세요.
+            </div>
 
             {availableModels.length === 0 && (
               <div className="mt-3 p-3 bg-yellow-50 rounded-lg flex items-start space-x-2">

@@ -393,7 +393,7 @@ export const Admin: React.FC = () => {
                       <td className="py-3 px-4">
                         <input
                           type="number"
-                          value={model.piWon}
+                          value={model.piWon || ''}
                           onChange={(e) => handleModelPriceChange(model.id, e.target.value)}
                           className="w-24 px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
                           step="0.1"
@@ -402,7 +402,7 @@ export const Admin: React.FC = () => {
                       </td>
                       <td className="py-3 px-4">
                         <Badge variant="primary" size="sm">
-                          {formatWon(getDisplayPrice(model.piWon, localPolicy.margin))}
+                          {model.piWon !== null ? formatWon(getDisplayPrice(model.piWon, localPolicy.margin)) : '미정'}
                         </Badge>
                       </td>
                       <td className="py-3 px-4">

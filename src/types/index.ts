@@ -9,7 +9,7 @@ export interface AIModel {
   id: string;
   series: 'gpt' | 'claude' | 'perplexity' | 'coding' | 'image' | 'gemini' | 'video' | 'grok';
   displayName: string;
-  piWon: number; // 원가 (원)
+  piWon: number | null; // 원가 (원), null은 미정
   enabled: boolean;
   description?: string;
   tier: PriceTier; // 가격대 (low/mid/high)

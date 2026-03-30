@@ -38,7 +38,8 @@ export function roundToNearest10(amount: number): number {
 }
 
 // 표시용 가격 계산 (기본 가격 * 마진 → 10원 단위 반올림)
-export function getDisplayPrice(piWon: number, margin: number = 1.2): number {
+export function getDisplayPrice(piWon: number | null, margin: number = 1.2): number {
+  if (piWon === null) return 0;
   return roundToNearest10(piWon * margin);
 }
 
@@ -69,6 +70,7 @@ function calculateEffectiveDiscount(
     if (!model) return;
     
     const basePrice = model.series === 'video' ? (model.pricePerSecond ?? model.piWon) : model.piWon;
+    if (basePrice === null) return; // Skip models with null pricing
     const priceData = getFixedDisplayPriceOrFallback(model.id, basePrice, model.tier);
     const tier = priceData.tier;
     const alpha = modelWeights[tier] || 1.0;
@@ -134,6 +136,7 @@ export function calculatePrice(
     const model = models.find((m) => m.id === sel.modelId);
     if (model) {
       const basePrice = model.series === 'video' ? (model.pricePerSecond ?? model.piWon) : model.piWon;
+      if (basePrice === null) return; // Skip models with null pricing
       const priceData = getFixedDisplayPriceOrFallback(model.id, basePrice, model.tier);
       // 모델에 티어 정보가 없으면 여기서 설정
       if (!model.tier) {
@@ -410,6 +413,7 @@ export function calculatePMCEarn(
     if (!model) return;
     
     const basePrice = model.series === 'video' ? (model.pricePerSecond ?? model.piWon) : model.piWon;
+    if (basePrice === null) return; // Skip models with null pricing
     const priceData = getFixedDisplayPriceOrFallback(model.id, basePrice, model.tier);
     const tier = priceData.tier;
     const modelPrice = priceData.price * sel.quantity;

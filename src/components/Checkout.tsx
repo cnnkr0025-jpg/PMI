@@ -72,8 +72,8 @@ export const Checkout: React.FC = React.memo(() => {
           // 비디오 모델은 `quantity`가 초 단위이므로, 단가도 초당 가격을 사용
           displayPrice: model
             ? isVideoModel
-              ? (model.pricePerSecond ?? model.piWon)
-              : getFixedDisplayPriceOrFallback(model.id, model.piWon, model.tier).price
+              ? (model.pricePerSecond ?? model.piWon ?? 0)
+              : getFixedDisplayPriceOrFallback(model.id, model.piWon || 0, model.tier).price
             : 0,
         };
       });
@@ -424,14 +424,14 @@ export const Checkout: React.FC = React.memo(() => {
                       <div className="flex-1">
                         <h4 className="font-medium">{item.model.displayName}</h4>
                         <p className="text-sm text-gray-600">
-                          {formatWon(item.displayPrice)}/{item.model.series === 'video' ? '초' : '회'} ×{' '}
+                          {item.model.piWon !== null ? formatWon(item.displayPrice) : '미정'}/{item.model.series === 'video' ? '초' : '회'} ×{' '}
                           {item.quantity}
                           {item.model.series === 'video' ? '초' : '회'}
                         </p>
                       </div>
                       <div className="text-right">
                         <p className="font-semibold">
-                          {formatWon(item.displayPrice * item.quantity)}
+                          {item.model.piWon !== null ? formatWon(item.displayPrice * item.quantity) : '미정'}
                         </p>
                       </div>
                     </div>

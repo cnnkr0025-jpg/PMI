@@ -58,8 +58,8 @@ export default function GuidePage() {
                         </td>
                         <td className="py-3 pr-6 text-gray-700 dark:text-gray-300 whitespace-nowrap">
                           {series === 'video'
-                            ? `${m.piWon.toLocaleString()}원/초`
-                            : `${m.piWon.toLocaleString()}원/회`}
+                            ? (m.piWon ? `${m.piWon.toLocaleString()}원/초` : '미정')
+                            : (m.piWon ? `${m.piWon.toLocaleString()}원/회` : '미정')}
                         </td>
                         <td className="py-3 pr-6 text-gray-500 dark:text-gray-400 max-w-xs">
                           {typeof m.description === 'string' ? m.description : ''}

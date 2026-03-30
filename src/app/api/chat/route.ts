@@ -403,11 +403,15 @@ Example style:
 🎯 [key point]
 😤 honestly you're gonna CRUSH this!!"`;
 
+  const speechStylePrompt = languageInstruction?.includes('반말') || languageInstruction?.includes('informal')
+    ? '\n반드시 반말(casual/informal Korean)로만 답변하세요. 존댓말을 절대 섞지 마세요.'
+    : '\n반드시 존댓말(polite Korean)로만 답변하세요. 반말을 절대 섞지 마세요.';
+
   const baseSystemPrompt = isGPT5Series
-    ? `${chatGPTGuidelines}\nYou are GPT-5 series, the most capable model. Give thorough, insightful answers. Use **bold** for emphasis, ## headings for sections. Be comprehensive yet engaging.${codeBlockRule}${summaryRule}`
+    ? `${chatGPTGuidelines}\nYou are GPT-5 series, the most capable model. Give thorough, insightful answers. Use **bold** for emphasis, ## headings for sections. Be comprehensive yet engaging.${codeBlockRule}${summaryRule}${speechStylePrompt}`
     : isCodingModel
-    ? `${chatGPTGuidelines}\nYou are a world-class coding assistant. Write clean, well-commented code. Explain your reasoning. Debug thoroughly. Suggest optimizations.${codeBlockRule}${summaryRule}`
-    : `${chatGPTGuidelines}\nGive detailed, helpful responses. Use **bold** for key points, ## headings when appropriate. Make your answers fun and engaging.${codeBlockRule}${summaryRule}`;
+    ? `${chatGPTGuidelines}\nYou are a world-class coding assistant. Write clean, well-commented code. Explain your reasoning. Debug thoroughly. Suggest optimizations.${codeBlockRule}${summaryRule}${speechStylePrompt}`
+    : `${chatGPTGuidelines}\nGive detailed, helpful responses. Use **bold** for key points, ## headings when appropriate. Make your answers fun and engaging.${codeBlockRule}${summaryRule}${speechStylePrompt}`;
   
   const personaPrompt = persona ? buildPersonaPrompt(persona) : '';
 
@@ -447,9 +451,9 @@ Example style:
     stream: !!(streaming && !isCodex)
   };
   
-  // GPT-5 시리즈는 minimal reasoning으로 빠르게 응답
+  // GPT-5 시리즈는 low reasoning으로 빠르게 응답 (minimal은 일부 모델에서 미지원)
   if (isGPT5Series) {
-    requestBody.reasoning_effort = 'minimal'; // minimal, low, medium, high 중 가장 빠름
+    requestBody.reasoning_effort = 'low';
   } else {
     // GPT-5 시리즈가 아닌 경우에만 temperature 추가
     requestBody.temperature = 0.9;
@@ -461,7 +465,7 @@ Example style:
     apiRequestBody = {
       model: requestBody.model,
       input: requestBody.messages,
-      max_tokens: requestBody.max_completion_tokens,
+      max_output_tokens: requestBody.max_completion_tokens,
     };
     if (requestBody.temperature !== undefined) {
       apiRequestBody.temperature = requestBody.temperature;
@@ -778,7 +782,6 @@ async function callAnthropic(model: string, messages: any[], userAttachments?: U
         model: modelMap[model] || 'claude-3-5-sonnet-20241022',
         max_tokens: maxTokens,
         temperature: temperature ?? 1.0,
-        stream: false,
         system: systemMessage?.content || 'You are a helpful AI assistant.',
         messages: transformed
       })
@@ -842,10 +845,10 @@ async function callPerplexity(model: string, messages: any[], userAttachments?: 
   const modelMap: { [key: string]: string } = {
     'sonar': 'sonar',
     'sonarPro': 'sonar-pro',
-    'deepResearch': 'sonar-reasoning',
+    'deepResearch': 'sonar-deep-research',
     'perplexity-sonar': 'sonar',
     'perplexity-sonar-pro': 'sonar-pro',
-    'perplexity-deep-research': 'sonar-reasoning'
+    'perplexity-deep-research': 'sonar-deep-research'
   };
   const cappedMaxTokens = typeof maxOutputTokens === 'number' ? Math.min(800, maxOutputTokens) : 800;
 

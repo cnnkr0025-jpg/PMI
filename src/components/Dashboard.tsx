@@ -189,7 +189,7 @@ export const Dashboard: React.FC = () => {
             </div>
             <p className="text-2xl font-bold mb-1 text-green-700">{formatWon(savedAmount)}</p>
             <p className="text-sm text-green-600 font-medium">{t.dashboard.pmcSaved}</p>
-            <p className="text-xs text-green-500 mt-1">💰 {t.dashboard.pmcRate}</p>
+            <p className="text-xs text-green-500 mt-1">{t.dashboard.pmcRate}</p>
           </div>
           
           <div className="dashboard-credit-card bg-white border border-gray-200 rounded-xl p-5">

@@ -120,43 +120,6 @@ export const Configurator: React.FC = () => {
           <p className="text-gray-600 dark:text-gray-400">{t.configurator.subtitle}</p>
         </div>
         
-        {/* PMC 광고 배너 */}
-        <div className="mb-6 bg-gradient-to-r from-yellow-400 via-orange-400 to-red-400 rounded-2xl p-1 shadow-lg">
-          <div className="bg-white dark:bg-gray-800 rounded-xl p-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="w-16 h-16 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full flex items-center justify-center shadow-lg">
-                  <Sparkles className="w-8 h-8 text-white" />
-                </div>
-                <div>
-                  <h3 className="text-xl font-bold text-gray-900 mb-1">
-                    {t.configurator.pmcBanner}
-                  </h3>
-                  <p className="text-sm text-gray-600">
-                    {t.configurator.pmcDescription} <span className="font-bold text-orange-600">{t.configurator.pmcMax}</span> • {t.configurator.pmcInfo}
-                  </p>
-                </div>
-              </div>
-              <div className="flex flex-col items-end gap-3">
-                <div className="bg-gradient-to-r from-yellow-100 to-orange-100 px-4 py-2 rounded-lg border-2 border-yellow-400">
-                  <p className="text-xs text-gray-600 mb-1">{t.configurator.expectedEarn}</p>
-                  <p className="text-2xl font-bold text-orange-600">
-                    {pmcCalculation.earnAmount > 0 ? `+${pmcCalculation.earnAmount.toLocaleString()} PMC` : t.price.noEarn}
-                  </p>
-                </div>
-                <button
-                  onClick={() => router.push('/docs')}
-                  className="group flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white text-xs font-semibold rounded-lg shadow-md hover:shadow-lg transition-all duration-200"
-                >
-                  <span>{t.configurator.pmcGuide}</span>
-                  <svg className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
         
         <div className="flex gap-6">
           {/* 왼쪽: 모델 리스트 */}

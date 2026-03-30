@@ -23,8 +23,8 @@ export const ModelCard: React.FC<ModelCardProps> = React.memo(({
   const { t } = useTranslation();
   const isVideoModel = model.series === 'video';
   const [showBatchInfo, setShowBatchInfo] = useState(false);
-  const priceData = getFixedDisplayPriceOrFallback(model.id, model.piWon, model.tier);
-  const displayPrice = isVideoModel ? (model.pricePerSecond ?? model.piWon) : priceData.price;
+  const priceData = getFixedDisplayPriceOrFallback(model.id, model.piWon || 0, model.tier);
+  const displayPrice = isVideoModel ? (model.pricePerSecond ?? model.piWon ?? 0) : priceData.price;
   
   const handleQuantityChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const value = parseInt(e.target.value) || 0;
@@ -96,7 +96,7 @@ export const ModelCard: React.FC<ModelCardProps> = React.memo(({
             )}
           </div>
           <span className="text-sm font-medium text-gray-700 flex-shrink-0">
-            {formatWon(displayPrice)}/{isVideoModel ? '초' : '회'}
+            {model.piWon !== null ? formatWon(displayPrice) : '미정'}/{isVideoModel ? '초' : '회'}
           </span>
         </div>
         
@@ -160,7 +160,7 @@ export const ModelCard: React.FC<ModelCardProps> = React.memo(({
             <div className="flex justify-between items-center">
               <span className="text-sm text-gray-600">{isVideoModel ? '예상 금액' : '월 예상 금액'}</span>
               <span className="text-base font-semibold text-gray-900">
-                {formatWon(displayPrice * quantity)}
+                {model.piWon !== null ? formatWon(displayPrice * quantity) : '미정'}
               </span>
             </div>
           </div>

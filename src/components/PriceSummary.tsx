@@ -82,7 +82,7 @@ export const PriceSummary: React.FC<PriceSummaryProps> = ({
                 </p>
               </div>
               <div className="text-xs text-gray-600">
-                적립률 {(pmcCalculation.totalRate * 100).toFixed(1)}% • 90일 유효
+                90일 유효
               </div>
             </div>
           )}
