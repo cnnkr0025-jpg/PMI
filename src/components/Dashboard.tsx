@@ -3,21 +3,12 @@
 import React, { useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStore } from '@/store';
-import { Card, CardContent, CardHeader } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
-import { Badge } from '@/components/ui/Badge';
 import { 
-  CreditCard, 
-  TrendingUp, 
-  Package, 
   MessageSquare,
   AlertCircle,
   Plus,
-  BarChart3,
-  Sparkles,
-  Coins,
-  Star,
-  ChevronRight
+  ArrowRight,
+  Bookmark,
 } from 'lucide-react';
 import { formatWon } from '@/utils/pricing';
 import { cn } from '@/utils/cn';
@@ -105,279 +96,221 @@ export const Dashboard: React.FC = () => {
     router.push('/chat');
   }, [router]);
   
-  const getUsageColor = useCallback((rate: number) => {
-    if (rate >= 80) return 'text-red-600 bg-red-100';
-    if (rate >= 50) return 'text-yellow-600 bg-yellow-100';
-    return 'text-green-600 bg-green-100';
-  }, []);
-  
-  const getProgressColor = useCallback((rate: number) => {
-    if (rate >= 80) return 'bg-red-500';
-    if (rate >= 50) return 'bg-yellow-500';
-    return 'bg-green-500';
-  }, []);
-
-  
   if (!wallet) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 flex items-center justify-center particles-bg">
-        <Card variant="bordered" className="max-w-md w-full glass-card shadow-soft-lg animate-scale-in">
-          <CardContent className="p-8 text-center">
-            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-br from-primary-100 to-purple-100 flex items-center justify-center">
-              <Package className="w-8 h-8 text-primary-600" />
-            </div>
-            <h2 className="text-xl font-semibold mb-2">크레딧이 없습니다</h2>
-            <p className="text-gray-600 mb-4">
-              AI 모델을 사용하려면 먼저 크레딧을 구매해주세요.
-            </p>
-            <Button variant="primary" onClick={handleRefill}>
-              <Plus className="w-4 h-4 mr-2" />
-              크레딧 구매하기
-            </Button>
-          </CardContent>
-        </Card>
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="max-w-sm w-full px-6 text-center">
+          <h2 className="text-lg font-semibold text-gray-900 mb-2">크레딧이 없습니다</h2>
+          <p className="text-sm text-gray-500 mb-6">AI 모델을 사용하려면 먼저 크레딧을 구매해주세요.</p>
+          <button
+            onClick={handleRefill}
+            className="dashboard-buy-credit-button inline-flex items-center gap-2 px-5 py-2.5 bg-gray-900 hover:bg-gray-800 text-white text-sm font-medium rounded-lg transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            크레딧 구매하기
+          </button>
+        </div>
       </div>
     );
   }
-  
+
   return (
     <div className="min-h-screen bg-white">
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-10">
-        {/* 헤더 */}
-        <div className="mb-10 flex flex-col sm:flex-row sm:justify-between sm:items-end gap-4">
-          <div>
-            <h1 className="text-2xl font-semibold text-gray-900 mb-1">{t.dashboard.title}</h1>
-            <p className="text-gray-500 text-sm">{t.dashboard.description}</p>
-          </div>
-          <div className="flex gap-3">
-            <button
-              onClick={handleStartChat}
-              className="dashboard-start-chat-button px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-900 rounded-md text-sm font-medium transition-colors flex items-center gap-2"
-            >
-              <MessageSquare className="w-4 h-4" />
-              {t.dashboard.startChat}
-            </button>
-            <button
-              onClick={handleRefill}
-              className="dashboard-buy-credit-button px-4 py-2 bg-gray-900 hover:bg-gray-800 text-white rounded-md text-sm font-medium transition-colors flex items-center gap-2"
-            >
-              <Plus className="w-4 h-4" />
-              {t.dashboard.buyCreditsButton}
-            </button>
-          </div>
+      <div className="max-w-4xl mx-auto px-6 py-12">
+
+        {/* 페이지 헤더 */}
+        <div className="mb-12">
+          <h1 className="text-3xl font-semibold tracking-tight text-gray-900 mb-2">{t.dashboard.title}</h1>
+          <p className="text-gray-500">{t.dashboard.description}</p>
         </div>
-        
-        {/* 통계 카드 */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-10">
-          {/* PMC 잔액 카드 */}
-          <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
-            <div className="flex items-center justify-between mb-4">
-              <p className="text-sm font-medium text-gray-500">{t.dashboard.pmcBalance}</p>
-              <Coins className="w-4 h-4 text-gray-400" />
-            </div>
-            <p className="text-2xl font-semibold text-gray-900 mb-1">{availablePMC.toLocaleString()}</p>
-            <p className="text-xs text-gray-500">{t.dashboard.pmcRate}</p>
-          </div>
-          
-          {/* PMC로 아낀 금액 카드 */}
-          <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
-            <div className="flex items-center justify-between mb-4">
-              <p className="text-sm font-medium text-gray-500">{t.dashboard.pmcSaved}</p>
-              <Sparkles className="w-4 h-4 text-gray-400" />
-            </div>
-            <p className="text-2xl font-semibold text-gray-900 mb-1">{formatWon(savedAmount)}</p>
-            <p className="text-xs text-gray-500">{t.dashboard.pmcRate}</p>
-          </div>
-          
-          <div className="dashboard-credit-card bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
-            <div className="flex items-center justify-between mb-4">
-              <p className="text-sm font-medium text-gray-500">{t.dashboard.totalCredits}</p>
-              <CreditCard className="w-4 h-4 text-gray-400" />
-            </div>
-            <p className="text-2xl font-semibold text-gray-900 mb-1">{creditStats.total}</p>
-          </div>
-          
-          <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
-            <div className="flex items-center justify-between mb-4">
-              <p className="text-sm font-medium text-gray-500">{t.dashboard.usedCredits}</p>
-              <TrendingUp className="w-4 h-4 text-gray-400" />
-            </div>
-            <p className="text-2xl font-semibold text-gray-900 mb-1">{creditStats.used}</p>
-          </div>
-          
-          <div className="dashboard-chat-card bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
-            <div className="flex items-center justify-between mb-4">
-              <p className="text-sm font-medium text-gray-500">{t.dashboard.totalChats}</p>
-              <MessageSquare className="w-4 h-4 text-gray-400" />
-            </div>
-            <p className="text-2xl font-semibold text-gray-900 mb-1">{chatSessions.length}</p>
-          </div>
+
+        {/* 빠른 액션 */}
+        <div className="flex items-center gap-3 mb-12">
+          <button
+            onClick={handleStartChat}
+            className="dashboard-start-chat-button inline-flex items-center gap-2 px-5 py-2.5 bg-gray-900 hover:bg-gray-800 text-white text-sm font-medium rounded-lg transition-colors"
+          >
+            <MessageSquare className="w-4 h-4" />
+            {t.dashboard.startChat}
+          </button>
+          <button
+            onClick={handleRefill}
+            className="dashboard-buy-credit-button inline-flex items-center gap-2 px-5 py-2.5 border border-gray-300 hover:border-gray-400 hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-lg transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            {t.dashboard.buyCreditsButton}
+          </button>
         </div>
-        
-        {/* 북마크 요약 */}
-        <div className="mb-10">
-          <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
-            <div className="flex items-center gap-2 mb-4">
-              <Star className="w-4 h-4 text-gray-500" />
-              <h3 className="text-sm font-medium text-gray-700">저장된 답변</h3>
+
+        {/* 크레딧 요약 */}
+        <div className="mb-12">
+          <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-5">크레딧 현황</h2>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-gray-200 border border-gray-200 rounded-xl overflow-hidden">
+            <div className="bg-white px-6 py-5">
+              <p className="text-xs text-gray-500 mb-2">{t.dashboard.pmcBalance}</p>
+              <p className="text-2xl font-semibold text-gray-900 tabular-nums">{availablePMC.toLocaleString()}</p>
+              <p className="text-xs text-gray-400 mt-1">{t.dashboard.pmcRate}</p>
             </div>
-            {bookmarkedMessages.length === 0 ? (
-              <p className="text-sm text-gray-500">저장된 답변이 없습니다. 채팅에서 북마크 버튼을 눌러 저장하세요.</p>
+            <div className="bg-white px-6 py-5">
+              <p className="text-xs text-gray-500 mb-2">{t.dashboard.pmcSaved}</p>
+              <p className="text-2xl font-semibold text-gray-900 tabular-nums">{formatWon(savedAmount)}</p>
+              <p className="text-xs text-gray-400 mt-1">누적 절약</p>
+            </div>
+            <div className="dashboard-credit-card bg-white px-6 py-5">
+              <p className="text-xs text-gray-500 mb-2">{t.dashboard.remainingCredits}</p>
+              <p className="text-2xl font-semibold text-gray-900 tabular-nums">{creditStats.remaining}</p>
+              <p className="text-xs text-gray-400 mt-1">잔여 / 전체 {creditStats.total}</p>
+            </div>
+            <div className="dashboard-chat-card bg-white px-6 py-5">
+              <p className="text-xs text-gray-500 mb-2">{t.dashboard.totalChats}</p>
+              <p className="text-2xl font-semibold text-gray-900 tabular-nums">{chatSessions.length}</p>
+              <p className="text-xs text-gray-400 mt-1">총 대화 수</p>
+            </div>
+          </div>
+
+          {creditStats.remaining < 10 && creditStats.remaining > 0 && (
+            <div className="mt-4 flex items-start gap-3 p-4 border border-amber-200 bg-amber-50 rounded-lg">
+              <AlertCircle className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-amber-900">{t.dashboard.lowCredits}</p>
+                <p className="text-sm text-amber-700 mt-0.5">{t.dashboard.refillCredits}</p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* 모델별 사용 현황 + 최근 내역 */}
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-12">
+
+          {/* 모델별 크레딧 */}
+          <div className="dashboard-usage-card lg:col-span-3">
+            <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-5">{t.dashboard.modelCredits}</h2>
+            {creditStats.models.filter(s => s.remaining > 0).length === 0 ? (
+              <p className="text-sm text-gray-400">{t.dashboard.noModelCredits}</p>
             ) : (
-              <>
-                <p className="text-xl font-semibold text-gray-900 mb-3">{bookmarkedMessages.length}개</p>
-                <div className="space-y-2 mb-4">
-                  {bookmarkedMessages.slice(0, 2).map(bm => (
-                    <div key={bm.id} className="p-3 bg-gray-50 rounded-md border border-gray-100">
-                      <p className="text-sm text-gray-600 truncate">{bm.content.slice(0, 80)}...</p>
+              <div className="space-y-5">
+                {creditStats.models.filter(s => s.remaining > 0).map(stat => (
+                  <div key={stat.model.id}>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm text-gray-700">{stat.model.displayName}</span>
+                      <span className="text-sm tabular-nums text-gray-500">
+                        {stat.remaining}<span className="text-gray-300 mx-1">/</span>{stat.total}
+                      </span>
                     </div>
-                  ))}
-                </div>
+                    <div className="h-1 w-full bg-gray-100 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-gray-900 rounded-full transition-all duration-500"
+                        style={{ width: `${100 - stat.usageRate}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* 최근 활동 */}
+          <div className="dashboard-activity-card lg:col-span-2">
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400">{t.dashboard.recentActivity}</h2>
+              {allTransactions.length > 5 && (
                 <button
-                  onClick={() => router.push('/chat')}
-                  className="text-sm text-gray-500 hover:text-gray-900 font-medium transition-colors flex items-center gap-1"
+                  onClick={() => setShowAllActivity(!showAllActivity)}
+                  className="text-xs text-gray-400 hover:text-gray-700 transition-colors flex items-center gap-1"
                 >
-                  채팅에서 보기 <ChevronRight className="w-3 h-3" />
+                  {showAllActivity ? '접기' : '전체 보기'}
+                  {!showAllActivity && <ArrowRight className="w-3 h-3" />}
                 </button>
-              </>
+              )}
+            </div>
+            {recentTransactions.length === 0 ? (
+              <p className="text-sm text-gray-400">{t.dashboard.noActivity}</p>
+            ) : (
+              <div className={cn('space-y-4', showAllActivity && 'max-h-96 overflow-y-auto')}>
+                {recentTransactions.map(transaction => {
+                  const model = transaction.modelId
+                    ? models.find(m => m.id === transaction.modelId)
+                    : null;
+                  const isPurchase = transaction.type === 'purchase';
+                  return (
+                    <div key={transaction.id} className="flex items-start gap-3">
+                      <div className={cn(
+                        'mt-0.5 w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 border',
+                        isPurchase ? 'border-gray-300 bg-gray-50' : 'border-gray-200 bg-white'
+                      )}>
+                        {isPurchase
+                          ? <Plus className="w-3 h-3 text-gray-500" />
+                          : <MessageSquare className="w-3 h-3 text-gray-400" />
+                        }
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-gray-800 font-medium leading-tight">
+                          {isPurchase ? '크레딧 구매' : '크레딧 사용'}
+                        </p>
+                        {model && <p className="text-xs text-gray-500 mt-0.5">{model.displayName}</p>}
+                        {!model && transaction.credits && (
+                          <p className="text-xs text-gray-500 mt-0.5 truncate">
+                            {Object.entries(transaction.credits)
+                              .map(([id, amount]) => {
+                                if (!amount || amount <= 0) return '';
+                                const m = models.find(mo => mo.id === id);
+                                return m ? `${m.displayName} ${amount}회` : '';
+                              })
+                              .filter(Boolean)
+                              .join(' · ')}
+                          </p>
+                        )}
+                        <p className="text-[11px] text-gray-400 mt-1">
+                          {new Date(transaction.timestamp).toLocaleString('ko-KR', {
+                            month: 'short', day: 'numeric',
+                            hour: '2-digit', minute: '2-digit',
+                          })}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* 모델별 크레딧 현황 */}
-          <div className="lg:col-span-2">
-            <div className="dashboard-usage-card bg-white border border-gray-200 rounded-xl p-6 shadow-sm h-full">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-base font-medium text-gray-900">{t.dashboard.modelCredits}</h2>
-                <BarChart3 className="w-4 h-4 text-gray-400" />
-              </div>
-              <div>
-                {creditStats.models.length === 0 ? (
-                  <div className="text-center py-10">
-                    <p className="text-gray-500 text-sm">{t.dashboard.noModelCredits}</p>
-                  </div>
-                ) : (
-                  <div className="space-y-6">
-                    {creditStats.models.filter(stat => stat.remaining > 0).map(stat => (
-                      <div key={stat.model.id} className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <h4 className="text-sm font-medium text-gray-700">{stat.model.displayName}</h4>
-                          <span className="text-sm text-gray-500 tabular-nums">
-                            {stat.remaining} / {stat.total}
-                          </span>
-                        </div>
-                        <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
-                          <div
-                            className={cn('h-full bg-gray-900 transition-all')}
-                            style={{ width: `${stat.usageRate}%` }}
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                
-                {creditStats.remaining < 10 && creditStats.remaining > 0 && (
-                  <div className="mt-8 p-4 bg-gray-50 rounded-lg flex items-start space-x-3 border border-gray-200">
-                    <AlertCircle className="w-4 h-4 text-gray-500 mt-0.5 flex-shrink-0" />
-                    <div className="text-sm">
-                      <p className="font-medium text-gray-900">
-                        {t.dashboard.lowCredits}
-                      </p>
-                      <p className="text-gray-500 mt-1">
-                        {t.dashboard.refillCredits}
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
+        {/* 저장된 답변 */}
+        <div className="mt-12 pt-12 border-t border-gray-100">
+          <div className="flex items-center justify-between mb-5">
+            <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400">저장된 답변</h2>
+            {bookmarkedMessages.length > 0 && (
+              <button
+                onClick={() => router.push('/chat')}
+                className="text-xs text-gray-400 hover:text-gray-700 transition-colors flex items-center gap-1"
+              >
+                채팅에서 보기 <ArrowRight className="w-3 h-3" />
+              </button>
+            )}
           </div>
-          
-          {/* 최근 거래 내역 */}
-          <div>
-            <div className="dashboard-activity-card bg-white border border-gray-200 rounded-xl p-6 shadow-sm h-full">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-base font-medium text-gray-900">{t.dashboard.recentActivity}</h2>
-                {allTransactions.length > 5 && (
-                  <button
-                    onClick={() => setShowAllActivity(!showAllActivity)}
-                    className="text-xs text-gray-500 hover:text-gray-900 font-medium transition-colors"
-                  >
-                    {showAllActivity ? '최근 내역' : '전체 보기'}
-                  </button>
-                )}
-              </div>
-              <div>
-                {recentTransactions.length === 0 ? (
-                  <div className="text-center py-10">
-                    <p className="text-gray-500 text-sm">{t.dashboard.noActivity}</p>
-                  </div>
-                ) : (
-                  <div className={`space-y-4 ${showAllActivity ? 'max-h-[60vh] overflow-y-auto pr-2' : ''}`}>
-                    {recentTransactions.map(transaction => {
-                      const model = transaction.modelId 
-                        ? models.find(m => m.id === transaction.modelId)
-                        : null;
-                      
-                      return (
-                        <div
-                          key={transaction.id}
-                          className="flex items-start space-x-3 group"
-                        >
-                          <div className={cn(
-                            'w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 border',
-                            transaction.type === 'purchase' 
-                              ? 'bg-gray-50 border-gray-200' 
-                              : 'bg-white border-gray-200'
-                          )}>
-                            {transaction.type === 'purchase' ? (
-                              <Plus className="w-3.5 h-3.5 text-gray-600" />
-                            ) : (
-                              <MessageSquare className="w-3.5 h-3.5 text-gray-600" />
-                            )}
-                          </div>
-                          <div className="flex-1 min-w-0 pt-0.5">
-                            <p className="text-sm font-medium text-gray-900 leading-none">
-                              {transaction.type === 'purchase' ? '크레딧 구매' : '크레딧 사용'}
-                            </p>
-                            {model && (
-                              <p className="text-xs text-gray-500 mt-1">
-                                {model.displayName}
-                              </p>
-                            )}
-                            {transaction.credits && (
-                              <p className="text-xs text-gray-500 mt-1 truncate">
-                                {Object.entries(transaction.credits)
-                                  .map(([id, amount]) => {
-                                    if (!amount || amount <= 0) return '';
-                                    const m = models.find(model => model.id === id);
-                                    return m ? `${m.displayName}: ${amount}회` : '';
-                                  })
-                                  .filter(Boolean)
-                                  .join(', ')
-                                }
-                              </p>
-                            )}
-                            <p className="text-[11px] text-gray-400 mt-1.5">
-                              {new Date(transaction.timestamp).toLocaleString('ko-KR', { 
-                                month: 'short', 
-                                day: 'numeric', 
-                                hour: '2-digit', 
-                                minute: '2-digit' 
-                              })}
-                            </p>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
+          {bookmarkedMessages.length === 0 ? (
+            <div className="flex items-center gap-3 py-4">
+              <Bookmark className="w-4 h-4 text-gray-300" />
+              <p className="text-sm text-gray-400">저장된 답변이 없습니다. 채팅에서 북마크를 눌러 저장하세요.</p>
             </div>
-          </div>
+          ) : (
+            <div className="space-y-3">
+              {bookmarkedMessages.slice(0, 3).map(bm => (
+                <div
+                  key={bm.id}
+                  className="flex items-start gap-3 py-3 border-b border-gray-100 last:border-0 cursor-pointer group"
+                  onClick={() => router.push('/chat')}
+                >
+                  <Bookmark className="w-3.5 h-3.5 text-gray-300 group-hover:text-gray-500 transition-colors mt-1 flex-shrink-0" />
+                  <p className="text-sm text-gray-600 group-hover:text-gray-900 transition-colors line-clamp-2 leading-relaxed">
+                    {bm.content.slice(0, 120)}{bm.content.length > 120 ? '…' : ''}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
+
       </div>
     </div>
   );
