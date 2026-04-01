@@ -165,9 +165,42 @@ CREATE OR REPLACE TRIGGER on_user_created
     FOR EACH ROW
     EXECUTE FUNCTION create_user_wallet();
 
+-- batch_requests table (48h 배치 모델 요청)
+CREATE TABLE IF NOT EXISTS public.batch_requests (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id TEXT NOT NULL,
+  model_id TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  message_id TEXT NOT NULL,
+  messages JSONB NOT NULL,
+  language TEXT DEFAULT 'ko',
+  speech_level TEXT DEFAULT 'formal',
+  status TEXT NOT NULL DEFAULT 'pending',
+  openai_batch_id TEXT,
+  anthropic_batch_id TEXT,
+  result TEXT,
+  error_message TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  completed_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_batch_requests_user_id ON public.batch_requests(user_id);
+CREATE INDEX IF NOT EXISTS idx_batch_requests_status ON public.batch_requests(status);
+CREATE INDEX IF NOT EXISTS idx_batch_requests_session_message ON public.batch_requests(session_id, message_id);
+CREATE INDEX IF NOT EXISTS idx_batch_requests_openai_batch_id ON public.batch_requests(openai_batch_id);
+CREATE INDEX IF NOT EXISTS idx_batch_requests_anthropic_batch_id ON public.batch_requests(anthropic_batch_id);
+
+-- batch_requests RLS
+ALTER TABLE public.batch_requests ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Service role can manage batch_requests" ON public.batch_requests
+    USING (true)
+    WITH CHECK (true);
+
 -- Comments for documentation
 COMMENT ON TABLE public.users IS '사용자 기본 정보';
 COMMENT ON TABLE public.user_wallets IS '사용자별 AI 모델 크레딧 지갑';
 COMMENT ON TABLE public.transactions IS '크레딧 구매 및 사용 내역';
 COMMENT ON TABLE public.chat_sessions IS '채팅 세션 및 대화 내역';
+COMMENT ON TABLE public.batch_requests IS '48h 배치 모델 처리 요청';
 

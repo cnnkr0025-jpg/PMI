@@ -83,7 +83,10 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       console.error('[Batch Submit] DB error:', error);
-      return NextResponse.json({ error: 'ERR_NET_00', reason: 'DB 저장 실패' }, { status: 500 });
+      const reason = process.env.NODE_ENV !== 'production'
+        ? `DB 저장 실패: ${error.code} - ${error.message}`
+        : 'DB 저장 실패';
+      return NextResponse.json({ error: 'ERR_NET_00', reason }, { status: 500 });
     }
 
     return NextResponse.json({ success: true, status: 'pending' });

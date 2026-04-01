@@ -2481,7 +2481,7 @@ export const Chat: React.FC = () => {
       {/* 메인 채팅 영역 */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* 사이드바 토글 버튼 */}
-        <div className="absolute top-[3.5rem] left-0 z-10 p-1">
+        <div className="absolute top-4 left-0 z-10 p-1">
           <button
             onClick={() => setSidebarOpen(v => !v)}
             className="p-1.5 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
