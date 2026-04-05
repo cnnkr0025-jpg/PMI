@@ -283,6 +283,7 @@ interface AppState {
     createdAt: Date;
     updatedAt: Date;
     isStarred?: boolean;
+    batchPendingMessageId?: string | null;
   }>;
   currentSessionId: string | null;
   lastChatSessionCreatedAt?: number;
@@ -323,6 +324,7 @@ interface AppState {
   addMessage: (sessionId: string, message: any) => void;
   updateMessageContent: (sessionId: string, messageId: string, content: string) => void;
   finalizeMessageContent: (sessionId: string, messageId: string, content: string) => void;
+  setSessionBatchPending: (sessionId: string, messageId: string | null) => void;
   addStoredFacts: (facts: string[]) => void;
   clearStoredFacts: () => void;
   setAdminMode: (isAdmin: boolean) => void;
@@ -870,6 +872,14 @@ export const useStore = create<AppState>()(
         set((state) => ({
           chatSessions: state.chatSessions.map((session) =>
             session.id === sessionId ? { ...session, title: newTitle, updatedAt: new Date() } : session
+          ),
+        }));
+      },
+
+      setSessionBatchPending: (sessionId, messageId) => {
+        set((state) => ({
+          chatSessions: state.chatSessions.map((session) =>
+            session.id === sessionId ? { ...session, batchPendingMessageId: messageId } : session
           ),
         }));
       },

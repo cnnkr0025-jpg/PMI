@@ -431,7 +431,6 @@ export const Chat: React.FC = () => {
   const [message, setMessage] = useState('');
   const [selectedModelId, setSelectedModelId] = useState<string>('');
   const [videoSeconds, setVideoSeconds] = useState<number>(5);
-  const [batchPendingMessageId, setBatchPendingMessageId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isRenaming, setIsRenaming] = useState<string | null>(null);
   const [newTitle, setNewTitle] = useState('');
@@ -504,6 +503,7 @@ export const Chat: React.FC = () => {
     sendButtonSound,
     usePMC,
     getAvailablePMC,
+    setSessionBatchPending,
   } = useStore(
     (state) => ({
       chatSessions: state.chatSessions,
@@ -538,6 +538,7 @@ export const Chat: React.FC = () => {
       sendButtonSound: state.sendButtonSound,
       usePMC: state.usePMC,
       getAvailablePMC: state.getAvailablePMC,
+      setSessionBatchPending: state.setSessionBatchPending,
     }),
     shallow
   );
@@ -554,6 +555,13 @@ export const Chat: React.FC = () => {
     shallow
   );
   const streamingContent = streamingState?.content;
+
+  // 현재 세션의 48h 배치 대기 상태 (store에 저장 → 새로고침 후에도 유지)
+  const batchPendingMessageId = useMemo(() => {
+    if (!currentSessionId) return null;
+    const session = chatSessions.find((s) => s.id === currentSessionId);
+    return session?.batchPendingMessageId ?? null;
+  }, [chatSessions, currentSessionId]);
 
   const selectedModelPiWon = useMemo(() => {
     const m = models.find(m => m.id === selectedModelId);
@@ -930,7 +938,7 @@ export const Chat: React.FC = () => {
             batchPendingRefundRef.current = null;
           }
           finalizeMessageContent(currentSessionId, batchPendingMessageId, extracted.displayText);
-          setBatchPendingMessageId(null);
+          setSessionBatchPending(currentSessionId, null);
           clearInterval(interval);
         } else if (data.status === 'failed') {
           const pendingRefund = batchPendingRefundRef.current;
@@ -939,13 +947,13 @@ export const Chat: React.FC = () => {
             batchPendingRefundRef.current = null;
           }
           finalizeMessageContent(currentSessionId, batchPendingMessageId, '⚠️ 답변 생성에 실패했습니다. 다시 시도해 주세요.');
-          setBatchPendingMessageId(null);
+          setSessionBatchPending(currentSessionId, null);
           clearInterval(interval);
         }
       } catch {}
     }, 30000);
     return () => clearInterval(interval);
-  }, [batchPendingMessageId, currentSessionId, finalizeMessageContent, addStoredFacts, refundCredit, releasePendingRefundToken]);
+  }, [batchPendingMessageId, currentSessionId, finalizeMessageContent, addStoredFacts, refundCredit, releasePendingRefundToken, setSessionBatchPending]);
 
   // 템플릿에서 "사용하기" 선택 시: 입력창 자동 채움 + 모달 닫기
   useEffect(() => {
@@ -1498,7 +1506,7 @@ export const Chat: React.FC = () => {
               };
             }
             finalizeMessageContent(sessionIdForThisRequest, assistantMessageId, '⏳ 답변을 준비 중입니다. 최대 48시간 내에 답변이 도착합니다.');
-            setBatchPendingMessageId(assistantMessageId);
+            setSessionBatchPending(sessionIdForThisRequest, assistantMessageId);
           } else {
             const { errorReason } = await readApiErrorResponse(batchRes);
             if (capturedRefundToken) {
@@ -1506,7 +1514,7 @@ export const Chat: React.FC = () => {
               capturedRefundToken = false;
             }
             finalizeMessageContent(sessionIdForThisRequest, assistantMessageId, errorReason || '요청 전송에 실패했습니다. 다시 시도해 주세요.');
-            setBatchPendingMessageId(null);
+            setSessionBatchPending(sessionIdForThisRequest, null);
           }
         } catch {
           if (capturedRefundToken) {
@@ -2701,7 +2709,22 @@ export const Chat: React.FC = () => {
             {batchPendingMessageId && (
               <div className="mb-2 px-4 py-3 bg-blue-50 border border-blue-200 rounded-xl text-sm text-blue-800 flex items-center gap-2">
                 <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin shrink-0" />
-                <span>답변 준비 중입니다. 최대 48시간 내에 답변이 도착하면 자동으로 표시됩니다.</span>
+                <span className="flex-1">답변 준비 중입니다. 최대 48시간 내에 답변이 도착하면 자동으로 표시됩니다.</span>
+                <button
+                  onClick={() => {
+                    if (!currentSessionId) return;
+                    if (batchPendingRefundRef.current?.messageId === batchPendingMessageId) {
+                      refundCredit(batchPendingRefundRef.current.modelId, batchPendingRefundRef.current.piWon, batchPendingRefundRef.current.refundToken);
+                      batchPendingRefundRef.current = null;
+                    }
+                    finalizeMessageContent(currentSessionId, batchPendingMessageId, '⛔ 요청이 취소되었습니다.');
+                    setSessionBatchPending(currentSessionId, null);
+                  }}
+                  className="shrink-0 flex items-center gap-1 px-3 py-1.5 bg-white border border-blue-300 hover:bg-blue-100 rounded-lg text-xs text-blue-700 transition-colors"
+                >
+                  <Square className="w-3 h-3" />
+                  중단
+                </button>
               </div>
             )}
 

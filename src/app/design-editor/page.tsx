@@ -1,11 +1,11 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { LightweightPreview } from '@/components/design/LightweightPreview';
 import { ColorEditorPanel } from '@/components/design/ColorEditorPanel';
 import { DesignElement, DesignTheme, defaultTheme } from '@/types/design';
-import { ArrowLeft, Save, RotateCcw, Eye, Code, Send } from 'lucide-react';
+import { ArrowLeft, Save, RotateCcw } from 'lucide-react';
 import { SendButtonCustomizer } from '@/components/design/SendButtonCustomizer';
 import { toast } from 'sonner';
 import { useStore } from '@/store';
@@ -16,8 +16,7 @@ export default function DesignEditorPage() {
   const [theme, setTheme] = useState<DesignTheme>(defaultTheme);
   const [elementColors, setElementColors] = useState<Record<string, string>>({});
   const [selectedElement, setSelectedElement] = useState<DesignElement | null>(null);
-  const [currentPage, setCurrentPage] = useState<'chat' | 'dashboard' | 'settings'>('chat');
-  const [showCode, setShowCode] = useState(false);
+  const [currentPage, setCurrentPage] = useState<'chat' | 'dashboard'>('chat');
   const [isReady, setIsReady] = useState(false);
   const [showSendCustomizer, setShowSendCustomizer] = useState(false);
   const { sendButtonSymbol } = useStore();
@@ -103,45 +102,6 @@ export default function DesignEditorPage() {
     toast.success('디자인이 저장되었습니다! 실제 페이지에 적용됩니다.');
   }, [theme, elementColors, setCustomDesignTheme]);
 
-  const cssCode = useMemo(() => {
-    const elementColorCss = Object.entries(elementColors)
-      .map(([id, value]) => `.${id} { background-color: ${value}; }`)
-      .join('\n');
-
-    return `:root {
-  --primary-color: ${theme.primaryColor};
-  --secondary-color: ${theme.secondaryColor};
-  --background-color: ${theme.backgroundColor};
-  --text-color: ${theme.textColor};
-  --button-color: ${theme.buttonColor};
-  --card-color: ${theme.cardColor};
-  --header-color: ${theme.headerColor};
-}
-
-/* 헤더 스타일 */
-header {
-  background-color: var(--header-color);
-}
-
-/* 버튼 스타일 */
-.btn-primary {
-  background-color: var(--button-color);
-}
-
-/* 카드 스타일 */
-.card {
-  background-color: var(--card-color);
-}
-
-/* 텍스트 스타일 */
-body {
-  color: var(--text-color);
-  background-color: var(--background-color);
-}
-
-/* Custom element overrides */
-${elementColorCss}`;
-  }, [theme, elementColors]);
 
   if (!isReady) {
     return (
@@ -157,40 +117,33 @@ ${elementColorCss}`;
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-100">
       {/* 상단 툴바 */}
-      <div className="bg-gray-800 border-b border-gray-700 px-6 py-4">
+      <div className="bg-white border-b border-gray-200 px-6 py-3">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-3">
             <button
               onClick={() => router.back()}
-              className="flex items-center space-x-2 px-4 py-2 text-white hover:bg-gray-700 rounded-lg transition-colors"
+              className="flex items-center space-x-2 px-3 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors text-sm"
             >
-              <ArrowLeft className="w-5 h-5" />
+              <ArrowLeft className="w-4 h-4" />
               <span>돌아가기</span>
             </button>
-            <div className="h-6 w-px bg-gray-600"></div>
-            <h1 className="text-xl font-bold text-white">디자인 에디터</h1>
+            <div className="h-5 w-px bg-gray-300"></div>
+            <h1 className="text-base font-semibold text-gray-900">디자인 에디터</h1>
           </div>
 
           <div className="flex items-center space-x-2">
             <button
-              onClick={() => setShowCode(!showCode)}
-              className="flex items-center space-x-2 px-4 py-2 text-white hover:bg-gray-700 rounded-lg transition-colors"
-            >
-              <Code className="w-5 h-5" />
-              <span>{showCode ? 'Preview' : 'Code'}</span>
-            </button>
-            <button
               onClick={handleReset}
-              className="flex items-center space-x-2 px-4 py-2 text-white hover:bg-gray-700 rounded-lg transition-colors"
+              className="flex items-center space-x-2 px-3 py-2 text-gray-600 hover:bg-gray-100 border border-gray-200 rounded-lg transition-colors text-sm"
             >
-              <RotateCcw className="w-5 h-5" />
+              <RotateCcw className="w-4 h-4" />
               <span>초기화</span>
             </button>
             <button
               onClick={handleSave}
-              className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg transition-colors shadow-lg"
+              className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg transition-colors text-sm"
             >
-              <Save className="w-5 h-5" />
+              <Save className="w-4 h-4" />
               <span>저장</span>
             </button>
           </div>
@@ -204,7 +157,6 @@ ${elementColorCss}`;
           <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3">
-                <Eye className="w-5 h-5 text-white" />
                 <p className="text-white font-medium">
                   요소를 클릭하여 색상을 변경하세요. 변경사항은 실시간으로 적용됩니다.
                 </p>
@@ -230,39 +182,21 @@ ${elementColorCss}`;
                 >
                   대시보드
                 </button>
-                <button
-                  onClick={() => setCurrentPage('settings')}
-                  className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
-                    currentPage === 'settings'
-                      ? 'bg-white text-blue-600'
-                      : 'bg-white/20 text-white hover:bg-white/30'
-                  }`}
-                >
-                  설정
-                </button>
               </div>
             </div>
           </div>
 
           {/* 프리뷰 영역 */}
           <div className="p-8">
-            {showCode ? (
-              <div className="bg-gray-900 rounded-lg p-6 overflow-auto max-h-[600px]">
-                <pre className="text-green-400 font-mono text-sm">
-                  <code>{cssCode}</code>
-                </pre>
-              </div>
-            ) : (
-              <div className="bg-white rounded-2xl shadow-xl overflow-hidden" style={{ minHeight: '620px' }}>
-                <LightweightPreview
-                  currentPage={currentPage}
-                  theme={theme}
-                  elementColors={elementColors}
-                  onElementClick={handleElementClick}
-                  onSendButtonCustomize={() => setShowSendCustomizer(true)}
-                />
-              </div>
-            )}
+            <div className="bg-white rounded-2xl shadow-xl overflow-hidden" style={{ minHeight: '620px' }}>
+              <LightweightPreview
+                currentPage={currentPage}
+                theme={theme}
+                elementColors={elementColors}
+                onElementClick={handleElementClick}
+                onSendButtonCustomize={() => setShowSendCustomizer(true)}
+              />
+            </div>
           </div>
 
           {/* 테마 정보 */}

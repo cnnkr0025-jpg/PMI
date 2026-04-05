@@ -2,7 +2,7 @@
 
 import React, { memo } from 'react';
 import { DesignElement, DesignTheme } from '@/types/design';
-import { MessageSquare, Home, LayoutDashboard, Settings, Send, Plus, CreditCard, Zap, BarChart3, Clock } from 'lucide-react';
+import { MessageSquare, Home, LayoutDashboard, Settings, Send, Plus } from 'lucide-react';
 import { useStore } from '@/store';
 
 interface LightweightPreviewProps {
@@ -255,136 +255,137 @@ const DashboardPreview = memo(({
     return luminance > 0.6 ? '#111827' : '#ffffff';
   };
 
-  const startChatButtonBg = elementColors['dashboard-start-chat-button'] || 'transparent';
-  const buyCreditButtonBg = elementColors['dashboard-buy-credit-button'] || '#111827';
+  const startChatBg = elementColors['dashboard-start-chat-button'] || '#f3f4f6';
+  const buyCreditBg = elementColors['dashboard-buy-credit-button'] || '#111827';
+  const creditCardBg = elementColors['dashboard-credit-card'] || theme.cardColor || '#ffffff';
+  const chatCardBg = elementColors['dashboard-chat-card'] || theme.cardColor || '#ffffff';
+  const usageCardBg = elementColors['dashboard-usage-card'] || theme.cardColor || '#ffffff';
+  const activityCardBg = elementColors['dashboard-activity-card'] || theme.cardColor || '#ffffff';
 
-  const Card = ({ id, label, children, className = '' }: { id: string; label: string; children: React.ReactNode; className?: string }) => (
-    (() => {
-      const resolvedBg = elementColors[id] || theme.cardColor || '#ffffff';
+  const makeClickHandler = (id: string, label: string, color: string) => (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onElementClick({ id, type: 'button', label, selector: `.${id}`, currentColor: color, scope: 'element' });
+  };
+  const makeCardClickHandler = (id: string, label: string, color: string) => (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onElementClick({ id, type: 'card', label, selector: `.${id}`, currentColor: color, scope: 'element' });
+  };
 
-      return (
-    <div 
-      className={`p-6 rounded-xl border cursor-pointer hover:opacity-90 transition-opacity ${className}`}
-      style={{ backgroundColor: resolvedBg }}
-      onClick={(e) => {
-        e.stopPropagation();
-        onElementClick({
-          id,
-          type: 'card',
-          label,
-          selector: `.${id}`,
-          currentColor: resolvedBg,
-          scope: 'element',
-        });
-      }}
-    >
-      {children}
-    </div>
-      );
-    })()
-  );
+  const models = [
+    { name: 'GPT-5.1', remaining: 8, total: 10 },
+    { name: 'Claude Sonnet 4.6', remaining: 5, total: 10 },
+    { name: 'Gemini 2.5 Pro', remaining: 3, total: 5 },
+  ];
 
   return (
-    <div className="p-6 space-y-6 bg-gray-50 min-h-[500px]">
-      <div className="flex items-start justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">대시보드</h1>
-        <div className="flex items-center space-x-2">
+    <div className="px-6 py-8 bg-white min-h-[500px] space-y-8">
+      {/* 헤더 */}
+      <div className="flex items-end justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-gray-900 mb-1">대시보드</h1>
+          <p className="text-sm text-gray-500">크레딧 현황과 사용 내역을 확인하세요</p>
+        </div>
+        <div className="flex gap-2">
           <button
-            className="px-3 py-2 rounded-lg text-sm font-medium border"
-            style={{
-              backgroundColor: startChatButtonBg,
-              color: startChatButtonBg === 'transparent' ? '#374151' : getContrastHex(startChatButtonBg),
-              borderColor: '#d1d5db',
-            }}
-            onClick={(e) => {
-              e.stopPropagation();
-              onElementClick({
-                id: 'dashboard-start-chat-button',
-                type: 'button',
-                label: '대시보드 채팅 시작 버튼',
-                selector: '.dashboard-start-chat-button',
-                currentColor: startChatButtonBg,
-                scope: 'element',
-              });
-            }}
+            className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg border cursor-pointer hover:opacity-80 transition-opacity"
+            style={{ backgroundColor: startChatBg, color: getContrastHex(startChatBg) === '#ffffff' ? '#111827' : getContrastHex(startChatBg), borderColor: '#d1d5db' }}
+            onClick={makeClickHandler('dashboard-start-chat-button', '채팅 시작 버튼', startChatBg)}
+            title="클릭하여 색상 변경"
           >
-            채팅 시작
+            <MessageSquare className="w-3.5 h-3.5" /> 채팅 시작
           </button>
           <button
-            className="px-3 py-2 rounded-lg text-sm font-medium"
-            style={{
-              backgroundColor: buyCreditButtonBg,
-              color: getContrastHex(buyCreditButtonBg),
-            }}
-            onClick={(e) => {
-              e.stopPropagation();
-              onElementClick({
-                id: 'dashboard-buy-credit-button',
-                type: 'button',
-                label: '대시보드 크레딧 구매 버튼',
-                selector: '.dashboard-buy-credit-button',
-                currentColor: buyCreditButtonBg,
-                scope: 'element',
-              });
-            }}
+            className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg cursor-pointer hover:opacity-80 transition-opacity"
+            style={{ backgroundColor: buyCreditBg, color: getContrastHex(buyCreditBg) }}
+            onClick={makeClickHandler('dashboard-buy-credit-button', '크레딧 구매 버튼', buyCreditBg)}
+            title="클릭하여 색상 변경"
           >
-            크레딧 구매
+            <Plus className="w-3.5 h-3.5" /> 크레딧 구매
           </button>
         </div>
       </div>
-      
-      <div className="grid grid-cols-3 gap-4">
-        <Card id="dashboard-credit-card" label="크레딧 카드">
-          <div className="flex items-center space-x-3">
-            <div className="p-3 rounded-lg bg-blue-100">
-              <CreditCard className="w-6 h-6 text-blue-600" />
-            </div>
-            <div>
-              <div className="text-sm text-gray-500">보유 크레딧</div>
-              <div className="text-2xl font-bold text-gray-900">₩12,500</div>
-            </div>
-          </div>
-        </Card>
 
-        <Card id="dashboard-usage-card" label="사용량 카드">
-          <div className="flex items-center space-x-3">
-            <div className="p-3 rounded-lg bg-green-100">
-              <Zap className="w-6 h-6 text-green-600" />
-            </div>
-            <div>
-              <div className="text-sm text-gray-500">이번 달 사용량</div>
-              <div className="text-2xl font-bold text-gray-900">127회</div>
-            </div>
-          </div>
-        </Card>
-
-        <Card id="dashboard-chat-card" label="대화 카드">
-          <div className="flex items-center space-x-3">
-            <div className="p-3 rounded-lg bg-purple-100">
-              <MessageSquare className="w-6 h-6 text-purple-600" />
-            </div>
-            <div>
-              <div className="text-sm text-gray-500">총 대화</div>
-              <div className="text-2xl font-bold text-gray-900">48개</div>
-            </div>
-          </div>
-        </Card>
-      </div>
-
-      <Card id="dashboard-activity-card" label="활동 카드" className="col-span-full">
-        <div className="flex items-center space-x-3 mb-4">
-          <Clock className="w-5 h-5 text-gray-400" />
-          <span className="font-medium text-gray-700">최근 활동</span>
-        </div>
-        <div className="space-y-3">
-          {['GPT-5.1로 대화 시작', 'Claude Opus 4.5 사용', '크레딧 충전 완료'].map((activity, i) => (
-            <div key={i} className="flex items-center justify-between py-2 border-b last:border-0">
-              <span className="text-sm text-gray-600">{activity}</span>
-              <span className="text-xs text-gray-400">{i + 1}시간 전</span>
+      {/* 통계 그리드 */}
+      <div>
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-3">크레딧 현황</p>
+        <div className="grid grid-cols-4 gap-px bg-gray-200 border border-gray-200 rounded-xl overflow-hidden">
+          {[
+            { id: 'dashboard-credit-card', bg: creditCardBg, label: '크레딧 카드', title: 'PMC 잔액', value: '1,200', sub: '1 PMC = 1원' },
+            { id: null, bg: '#ffffff', label: '', title: 'PMC 절약', value: '₩3,400', sub: '누적 절약' },
+            { id: null, bg: '#ffffff', label: '', title: '잔여 크레딧', value: '16', sub: '잔여 / 전체 25' },
+            { id: 'dashboard-chat-card', bg: chatCardBg, label: '대화 카드', title: '총 대화', value: '48', sub: '총 대화 수' },
+          ].map((item, i) => (
+            <div
+              key={i}
+              className={`px-5 py-4 ${item.id ? 'cursor-pointer hover:opacity-90 transition-opacity' : ''}`}
+              style={{ backgroundColor: item.id ? item.bg : '#ffffff' }}
+              onClick={item.id ? makeCardClickHandler(item.id, item.label, item.bg) : undefined}
+              title={item.id ? '클릭하여 색상 변경' : undefined}
+            >
+              <p className="text-xs text-gray-500 mb-1">{item.title}</p>
+              <p className="text-xl font-semibold text-gray-900">{item.value}</p>
+              <p className="text-[10px] text-gray-400 mt-0.5">{item.sub}</p>
             </div>
           ))}
         </div>
-      </Card>
+      </div>
+
+      {/* 하단 2열 */}
+      <div className="grid grid-cols-5 gap-8">
+        {/* 모델별 크레딧 */}
+        <div
+          className="col-span-3 cursor-pointer hover:opacity-90 transition-opacity"
+          style={{ backgroundColor: usageCardBg }}
+          onClick={makeCardClickHandler('dashboard-usage-card', '모델 사용량 카드', usageCardBg)}
+          title="클릭하여 색상 변경"
+        >
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-4">모델별 크레딧</p>
+          <div className="space-y-4">
+            {models.map((m, i) => (
+              <div key={i}>
+                <div className="flex justify-between mb-1">
+                  <span className="text-sm text-gray-700">{m.name}</span>
+                  <span className="text-sm tabular-nums text-gray-500">{m.remaining} / {m.total}</span>
+                </div>
+                <div className="h-1 w-full bg-gray-100 rounded-full overflow-hidden">
+                  <div className="h-full bg-gray-900 rounded-full" style={{ width: `${(m.remaining / m.total) * 100}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* 최근 활동 */}
+        <div
+          className="col-span-2 cursor-pointer hover:opacity-90 transition-opacity"
+          style={{ backgroundColor: activityCardBg }}
+          onClick={makeCardClickHandler('dashboard-activity-card', '최근 활동 카드', activityCardBg)}
+          title="클릭하여 색상 변경"
+        >
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-4">최근 활동</p>
+          <div className="space-y-4">
+            {[
+              { action: '크레딧 사용', model: 'GPT-5.1', time: '10분 전' },
+              { action: '크레딧 사용', model: 'Claude Sonnet', time: '1시간 전' },
+              { action: '크레딧 구매', model: '', time: '2일 전' },
+            ].map((tx, i) => (
+              <div key={i} className="flex items-start gap-2">
+                <div className="w-5 h-5 rounded-full border border-gray-200 bg-gray-50 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  {tx.action === '크레딧 구매'
+                    ? <Plus className="w-2.5 h-2.5 text-gray-500" />
+                    : <MessageSquare className="w-2.5 h-2.5 text-gray-400" />
+                  }
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-gray-800 leading-tight">{tx.action}</p>
+                  {tx.model && <p className="text-[10px] text-gray-500 mt-0.5">{tx.model}</p>}
+                  <p className="text-[10px] text-gray-400 mt-0.5">{tx.time}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   );
 });
