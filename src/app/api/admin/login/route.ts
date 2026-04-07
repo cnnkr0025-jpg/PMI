@@ -10,6 +10,9 @@ import {
   getRequestAdminPath,
   setNoStoreHeaders,
 } from '@/lib/serverSecurity';
+import { isMfaEnabled } from '@/lib/mfa';
+import { generateMfaPendingToken } from '@/app/api/admin/mfa/verify/route';
+import { evaluateRisk, recordAdminBurst } from '@/lib/riskScore';
 
 export async function POST(request: NextRequest) {
   try {
@@ -30,6 +33,16 @@ export async function POST(request: NextRequest) {
 
     if (!password) {
       return NextResponse.json({ error: '비밀번호를 입력해주세요.' }, { status: 400 });
+    }
+
+    // Risk Score 평가 — 고위험 IP는 로그인 시도 전 차단
+    const userAgent = request.headers.get('user-agent') || 'unknown';
+    const risk = evaluateRisk({ ip: clientIp, userAgent, pathname: '/api/admin/login' });
+    if (risk.action === 'criticalBlock' || risk.action === 'tempBlock') {
+      return NextResponse.json(
+        { error: `비정상적인 접근 패턴이 감지되었습니다. (Risk: ${risk.score})` },
+        { status: 429 }
+      );
     }
 
     // IP 잠금 상태 확인
@@ -62,8 +75,18 @@ export async function POST(request: NextRequest) {
       }, { status: 401 });
     }
 
-    // 토큰 생성 및 쿠키 설정
-    const userAgent = request.headers.get('user-agent') || 'unknown';
+    // MFA 활성화 여부 확인
+    const mfaEnabled = await isMfaEnabled();
+
+    if (mfaEnabled) {
+      // MFA 2단계 필요 — pending 토큰(3분) 반환
+      const pendingToken = await generateMfaPendingToken(requestAdminPath);
+      return setNoStoreHeaders(
+        NextResponse.json({ mfaRequired: true, pendingToken })
+      );
+    }
+
+    // MFA 미설정 시 기존 플로우: 즉시 토큰 발급
     const token = await generateAdminToken(userAgent, requestAdminPath);
 
     const response = setNoStoreHeaders(NextResponse.json({ 

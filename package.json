@@ -6,7 +6,14 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit --pretty false",
+    "audit:deps": "npm audit --audit-level=high",
+    "audit:secrets": "node scripts/backup-encrypt.js --list",
+    "backup": "node scripts/backup-encrypt.js",
+    "backup:verify": "node scripts/backup-encrypt.js --verify",
+    "backup:rehearsal": "node scripts/backup-encrypt.js --rehearsal",
+    "backup:list": "node scripts/backup-encrypt.js --list"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.58.0",

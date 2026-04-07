@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { jwtVerify } from 'jose';
+import { jwtVerify, importSPKI } from 'jose';
 
 // ── Edge Runtime 호환 인라인 유틸리티 ──
 
@@ -8,6 +8,48 @@ function generateCsrfToken(): string {
   const array = new Uint8Array(32);
   crypto.getRandomValues(array);
   return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
+// ── RS256 공개키 캐시 (Edge Runtime 호환) ──
+let _rsaPublicKeyCached: CryptoKey | null = null;
+let _rsaKeyAttempted = false;
+
+async function getRsaPublicKey(): Promise<CryptoKey | null> {
+  if (_rsaKeyAttempted) return _rsaPublicKeyCached;
+  _rsaKeyAttempted = true;
+  const raw = process.env.JWT_RSA_PUBLIC_KEY;
+  if (!raw) return null;
+  try {
+    const pem = raw.replace(/\\n/g, '\n');
+    _rsaPublicKeyCached = await importSPKI(pem, 'RS256') as CryptoKey;
+    return _rsaPublicKeyCached;
+  } catch {
+    return null;
+  }
+}
+
+// ── Sliding Window Rate Limit (IP + UserID 복합키) ──
+const slidingWindowMap = new Map<string, number[]>();
+const SW_WINDOW_MS = 60_000; // 1분
+const SW_MAX_REQUESTS = 80;
+const SW_MAP_MAX = 30_000;
+
+function slidingWindowCheck(key: string): boolean {
+  const now = Date.now();
+  let timestamps = slidingWindowMap.get(key);
+  if (!timestamps) {
+    if (slidingWindowMap.size >= SW_MAP_MAX) {
+      const fk = slidingWindowMap.keys().next().value;
+      if (fk !== undefined) slidingWindowMap.delete(fk);
+    }
+    slidingWindowMap.set(key, [now]);
+    return false;
+  }
+  // 윈도우 밖 제거
+  timestamps = timestamps.filter(t => now - t < SW_WINDOW_MS);
+  timestamps.push(now);
+  slidingWindowMap.set(key, timestamps);
+  return timestamps.length > SW_MAX_REQUESTS;
 }
 
 function getClientIp(request: NextRequest): string {
@@ -202,7 +244,8 @@ export async function middleware(request: NextRequest) {
     return NextResponse.json({ error: '요청 속도가 너무 빠릅니다.' }, { status: 429 });
   }
 
-  // 보호된 경로에 대한 세션 검증
+  // 보호된 경로에 대한 세션 검증 (RS256 우선, HS256 폴백)
+  let sessionUserId: string | undefined;
   if (isProtectedPath) {
     const sessionToken = request.cookies.get('session')?.value;
 
@@ -210,20 +253,45 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(new URL('/login', request.url));
     }
 
-    try {
-      const secret = process.env.JWT_SECRET;
-      if (!secret || secret.length < 32) {
-        return NextResponse.redirect(new URL('/login', request.url));
-      }
+    let verified = false;
 
-      const key = new TextEncoder().encode(secret);
-      await jwtVerify(sessionToken, key, { algorithms: ['HS256'] });
-    } catch {
+    // RS256 시도
+    const rsaPubKey = await getRsaPublicKey();
+    if (rsaPubKey) {
+      try {
+        const { payload } = await jwtVerify(sessionToken, rsaPubKey, { algorithms: ['RS256'] });
+        verified = true;
+        sessionUserId = payload.userId as string;
+      } catch {}
+    }
+
+    // HS256 폴백
+    if (!verified) {
+      try {
+        const secret = process.env.JWT_SECRET;
+        if (!secret || secret.length < 32) {
+          return NextResponse.redirect(new URL('/login', request.url));
+        }
+        const key = new TextEncoder().encode(secret);
+        const { payload } = await jwtVerify(sessionToken, key, { algorithms: ['HS256'] });
+        verified = true;
+        sessionUserId = payload.userId as string;
+      } catch {}
+    }
+
+    if (!verified) {
       return NextResponse.redirect(new URL('/login', request.url));
     }
   }
 
-  // ⑥ IP 남용 체크 (1분 내 80회)
+  // ⑥ Sliding Window Rate Limit (IP + UserID 복합키)
+  const rateLimitKey = sessionUserId ? `${clientIp}:${sessionUserId}` : clientIp;
+  if (slidingWindowCheck(rateLimitKey)) {
+    return NextResponse.json(
+      { error: '비정상적인 요청 패턴이 감지되었습니다.' },
+      { status: 429 }
+    );
+  }
   if (isIPAbusive(clientIp)) {
     return NextResponse.json(
       { error: '비정상적인 요청 패턴이 감지되었습니다.' },

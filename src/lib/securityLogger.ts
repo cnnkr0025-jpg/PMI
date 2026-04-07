@@ -1,6 +1,11 @@
 /**
  * 보안 이벤트 로깅 시스템
+ * - auditLog.ts: Supabase 영속화
+ * - alerting.ts: Discord/Slack 실시간 알림
  */
+
+import { audit } from './auditLog';
+import { sendSecurityAlert } from './alerting';
 
 export enum SecurityEventType {
   AUTH_SUCCESS = 'AUTH_SUCCESS',
@@ -197,38 +202,51 @@ class SecurityLogger {
   }
 
   /**
-   * Critical 이벤트 알림
+   * Critical 이벤트 알림 (Discord/Slack 웹훅 연동)
    */
   private alertCriticalEvent(event: SecurityEvent): void {
-    // 실제 구현: 이메일, Slack, PagerDuty 등으로 알림
     console.error('[CRITICAL SECURITY EVENT]', event);
-    
-    // TODO: 실제 알림 시스템 연동
-    // - 이메일 발송
-    // - Slack 웹훅
-    // - SMS 알림
+    sendSecurityAlert({
+      title: `[${event.type}] Critical Security Event`,
+      message: `User: ${event.userId || 'N/A'} | IP: ${event.ip || 'N/A'}`,
+      severity: 'critical',
+      fields: {
+        Type: event.type,
+        ...(event.userId ? { UserID: event.userId } : {}),
+        ...(event.ip ? { IP: event.ip } : {}),
+        ...(event.details ? { Details: JSON.stringify(event.details).slice(0, 200) } : {}),
+      },
+    });
   }
 
   /**
-   * 외부 로깅 서비스로 전송
+   * 외부 로깅 서비스로 전송 (Supabase audit_logs 영속화)
    */
   private sendToExternalLogger(event: SecurityEvent): void {
-    // 프로덕션 환경에서만 실행
-    if (process.env.NODE_ENV !== 'production') {
-      return;
+    try {
+      audit({
+        event_type: event.type as any,
+        severity: event.severity === 'critical' ? 'critical' : event.severity === 'high' ? 'error' : event.severity === 'medium' ? 'warn' : 'info',
+        user_id: event.userId,
+        ip: event.ip,
+        user_agent: event.userAgent,
+        details: event.details,
+      });
+    } catch {
+      // 감사 로그 실패는 무시 (무한루프 방지)
     }
 
-    // TODO: 외부 로깅 서비스 연동
-    // 예: Sentry, LogRocket, DataDog, CloudWatch 등
-    
-    try {
-      // Sentry 예시
-      // Sentry.captureMessage(`Security Event: ${event.type}`, {
-      //   level: event.severity,
-      //   extra: event,
-      // });
-    } catch (error) {
-      console.error('Failed to send security event to external logger:', error);
+    // warn 이상은 외부 알림
+    if (event.severity === 'high' || event.severity === 'critical') {
+      sendSecurityAlert({
+        title: `Security: ${event.type}`,
+        message: `Severity: ${event.severity}`,
+        severity: event.severity === 'critical' ? 'critical' : 'error',
+        fields: {
+          ...(event.userId ? { UserID: event.userId } : {}),
+          ...(event.ip ? { IP: event.ip } : {}),
+        },
+      });
     }
   }
 

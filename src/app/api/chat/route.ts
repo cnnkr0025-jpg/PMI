@@ -407,11 +407,13 @@ Example style:
     ? '\n반드시 반말(casual/informal Korean)로만 답변하세요. 존댓말을 절대 섞지 마세요.'
     : '\n반드시 존댓말(polite Korean)로만 답변하세요. 반말을 절대 섞지 마세요.';
 
+  const gptFormatGuidelines = `\nFormatting: break info into digestible chunks; avoid long narrative paragraphs; prefer compact bullets and short sections. Use ## for sections, ### for subsections. Use markdown tables for comparisons.`;
+
   const baseSystemPrompt = isGPT5Series
-    ? `${chatGPTGuidelines}\nYou are GPT-5 series, the most capable model. Give thorough, insightful answers. Use **bold** for emphasis, ## headings for sections. Be comprehensive yet engaging.${codeBlockRule}${summaryRule}${speechStylePrompt}`
+    ? `${chatGPTGuidelines}\nYou are GPT-5 series, the most capable model. Give thorough, insightful answers. Use **bold** for emphasis, ## headings for sections. Be comprehensive yet engaging.${gptFormatGuidelines}${codeBlockRule}${summaryRule}${speechStylePrompt}`
     : isCodingModel
-    ? `${chatGPTGuidelines}\nYou are a world-class coding assistant. Write clean, well-commented code. Explain your reasoning. Debug thoroughly. Suggest optimizations.${codeBlockRule}${summaryRule}${speechStylePrompt}`
-    : `${chatGPTGuidelines}\nGive detailed, helpful responses. Use **bold** for key points, ## headings when appropriate. Make your answers fun and engaging.${codeBlockRule}${summaryRule}${speechStylePrompt}`;
+    ? `${chatGPTGuidelines}\nYou are a world-class coding assistant. Write clean, well-commented code. Explain your reasoning. Debug thoroughly. Suggest optimizations.${gptFormatGuidelines}${codeBlockRule}${summaryRule}${speechStylePrompt}`
+    : `${chatGPTGuidelines}\nGive detailed, helpful responses. Use **bold** for key points, ## headings when appropriate. Make your answers fun and engaging.${gptFormatGuidelines}${codeBlockRule}${summaryRule}${speechStylePrompt}`;
   
   const personaPrompt = persona ? buildPersonaPrompt(persona) : '';
 
@@ -1246,14 +1248,35 @@ export async function POST(request: NextRequest) {
       .filter(Boolean)
       .join('\n\n');
 
-    // 기본 프롬프트 (짧고 강력하게, 예시 포함)
+    // 기본 프롬프트 (모델별 분기)
     const summaryRuleForOthers = '\nEnd every reply with hidden summary in ~~ markers:\n~~\nQ:(10-word summary)\nA:(15-word summary)\nKey:(facts/names/numbers)\n~~';
-    const basePrompt = `Best friend AI. Rules: wild reactions, 3+ emojis, ALL CAPS hype, casual texting tone, never formal, short punchy sentences.
+
+    const isPerplexityModel = PERPLEXITY_MODEL_IDS.has(modelId) || modelId.startsWith('perplexity');
+    const isClaudeModel = ANTHROPIC_MODEL_IDS.has(modelId) || modelId.startsWith('claude');
+
+    const perplexityBasePrompt = `Answer format rules:
+Start with a direct 1-2 sentence answer. Never open with a header or meta-commentary.
+Use ## headers only when organizing substantial multi-section content.
+Lists: one item per line, no indentation. Single newline between list items, double newline between paragraphs.
+Keep paragraphs short (2-3 sentences max).${summaryRuleForOthers}`;
+
+    const claudeBasePrompt = `Response style rules:
+Write in readable, flowing prose that guides the reader naturally.
+Never output a series of overly short bullet points or fragment information into isolated points.
+Use minimum formatting—prefer prose over excessive markdown. Match the user's prompt style.${summaryRuleForOthers}`;
+
+    const defaultBasePrompt = `Best friend AI. Rules: wild reactions, 3+ emojis, ALL CAPS hype, casual texting tone, never formal, short punchy sentences.
 Example style:
 "OMG WAIT 🔥🔥🔥 bro that's INSANE!! okay okay let me break it down 👇
 💡 [answer]
 🎯 [key point]
 😤 honestly you're gonna CRUSH this!!"${summaryRuleForOthers}`;
+
+    const basePrompt = isPerplexityModel
+      ? perplexityBasePrompt
+      : isClaudeModel
+      ? claudeBasePrompt
+      : defaultBasePrompt;
 
     const applyLanguageInstruction = (inputMessages: any[]) => {
       const idx = inputMessages.findIndex((m: any) => m?.role === 'system');

@@ -6,7 +6,7 @@ import { useStore } from '@/store';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Card, CardContent, CardHeader } from '@/components/ui/Card';
-import { Sparkles, ArrowRight, Zap, Users, TrendingDown, MessageSquare, CreditCard, Shield, Lock, Settings } from 'lucide-react';
+import { Sparkles, ArrowRight, Zap, Users, TrendingDown, MessageSquare, CreditCard, Shield, Lock, Settings, CheckCircle, Trash2, Eye, EyeOff, Server, AlertCircle } from 'lucide-react';
 import { initialModels, seriesInfo } from '@/data/models';
 import { formatWon, getFixedDisplayPriceOrFallback } from '@/utils/pricing';
 import { useCustomTheme } from '@/hooks/useCustomTheme';
@@ -96,6 +96,23 @@ export const Landing: React.FC = () => {
 
   return (
     <div className="min-h-screen text-gray-900 bg-gray-50" style={{ backgroundColor: theme.backgroundColor }}>
+
+      {!isAuthenticated && (
+        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-4 py-3">
+          <div className="mx-auto max-w-7xl flex flex-col sm:flex-row items-center justify-between gap-2 sm:gap-4">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <Sparkles className="h-4 w-4 flex-shrink-0" />
+              <span>지금 가입하면 <strong>무료 체험 크레딧</strong>을 드립니다 — 구독 없이 AI를 바로 써보세요!</span>
+            </div>
+            <button
+              onClick={handleSignup}
+              className="flex-shrink-0 bg-white text-blue-600 hover:bg-blue-50 transition-colors text-xs font-bold px-4 py-1.5 rounded-full"
+            >
+              지금 무료로 시작하기
+            </button>
+          </div>
+        </div>
+      )}
 
       <nav className="sticky top-0 z-40 glass-card-vivid border-b border-white/50 shadow-soft-lg" style={{ backgroundColor: theme.headerColor + 'F2' }}>
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-6 px-4 py-5 sm:px-6 lg:px-8">
@@ -350,6 +367,82 @@ export const Landing: React.FC = () => {
           </div>
         </section>
 
+        <section id="security" className="px-4 py-20 sm:px-6 lg:px-8 bg-white">
+          <div className="mx-auto max-w-7xl space-y-14">
+            <div className="text-center space-y-4">
+              <div className="inline-flex items-center gap-2 neo-card px-6 py-3">
+                <Shield className="h-5 w-5 text-green-600" />
+                <span className="font-bold text-green-600">보안 & 개인정보</span>
+              </div>
+              <h2 className="text-4xl font-black text-gray-900 sm:text-5xl tracking-tight">
+                말이 아닌 <span className="text-green-600">구조</span>로 증명합니다
+              </h2>
+              <p className="text-lg text-gray-500 max-w-2xl mx-auto">
+                Pick-My-AI는 신뢰를 약속이 아닌 시스템으로 보여줍니다.
+              </p>
+            </div>
+
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+              {[
+                { icon: <Lock className="w-6 h-6" />, title: '전송·저장 암호화', desc: '모든 데이터는 전송 및 저장 과정에서 암호화됩니다.', color: 'text-blue-600', bg: 'bg-blue-50' },
+                { icon: <Trash2 className="w-6 h-6" />, title: '자동 삭제 시스템', desc: '대화 데이터는 설정에 따라 자동으로 삭제됩니다.', color: 'text-red-500', bg: 'bg-red-50' },
+                { icon: <EyeOff className="w-6 h-6" />, title: '외부 공유 없음', desc: '사용자 데이터는 외부에 판매·공유되지 않습니다.', color: 'text-purple-600', bg: 'bg-purple-50' },
+                { icon: <Server className="w-6 h-6" />, title: '안전한 인프라', desc: 'Supabase 기반 인증 및 데이터 관리로 운영됩니다.', color: 'text-green-600', bg: 'bg-green-50' },
+              ].map((item) => (
+                <div key={item.title} className="neo-card p-6 hover-float space-y-4">
+                  <div className={`flex h-12 w-12 items-center justify-center rounded-xl ${item.bg} ${item.color}`}>
+                    {item.icon}
+                  </div>
+                  <div>
+                    <h3 className="text-base font-black text-gray-900">{item.title}</h3>
+                    <p className="mt-1.5 text-sm text-gray-500 leading-relaxed">{item.desc}</p>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-green-600">
+                    <CheckCircle className="w-3.5 h-3.5" />
+                    적용 중
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="neo-card p-8 md:p-10 space-y-8">
+              <div className="flex items-center gap-3">
+                <Eye className="w-5 h-5 text-gray-700" />
+                <h3 className="text-xl font-black text-gray-900">투명성 보고서</h3>
+              </div>
+              <div className="grid gap-6 sm:grid-cols-3">
+                {[
+                  { label: '데이터 유출', value: '0건', sub: '서비스 시작 이후', color: 'text-green-600' },
+                  { label: '외부 공유', value: '0건', sub: '판매·공유 내역 없음', color: 'text-green-600' },
+                  { label: '삭제 요청 처리율', value: '100%', sub: '요청 즉시 처리', color: 'text-blue-600' },
+                ].map((stat) => (
+                  <div key={stat.label} className="text-center space-y-1 neo-inset rounded-xl p-6">
+                    <p className={`text-4xl font-black ${stat.color}`}>{stat.value}</p>
+                    <p className="text-sm font-semibold text-gray-700">{stat.label}</p>
+                    <p className="text-xs text-gray-400">{stat.sub}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="flex items-start gap-3 p-4 rounded-xl bg-gray-50 border border-gray-100">
+                <AlertCircle className="w-4 h-4 text-gray-400 flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-gray-500 leading-relaxed">
+                  본 수치는 서비스 운영 현황을 기반으로 작성되었습니다. 데이터 삭제 요청은 설정 또는 문의를 통해 언제든지 신청하실 수 있습니다.
+                </p>
+              </div>
+            </div>
+
+            <div className="text-center">
+              <button
+                onClick={() => router.push('/security')}
+                className="inline-flex items-center gap-2 text-sm font-semibold text-green-600 hover:text-green-700 underline underline-offset-4 transition-colors"
+              >
+                <Shield className="w-4 h-4" />
+                보안 대시보드 전체 보기
+              </button>
+            </div>
+          </div>
+        </section>
+
         <section className="relative overflow-hidden px-4 py-20 bg-primary text-primary-foreground sm:px-6 lg:px-8">
           <div className="relative mx-auto max-w-4xl text-center">
             <h2 className="text-4xl font-extrabold sm:text-5xl">지금 바로 시작하세요</h2>
@@ -379,14 +472,26 @@ export const Landing: React.FC = () => {
         </section>
       </main>
 
-      <footer className="relative border-t border-gray-200/50 glass-card py-8 px-4">
-        <div className="mx-auto flex max-w-7xl flex-col gap-4 text-center text-sm text-gray-500 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
-          <div className="flex items-center justify-center gap-2 text-gray-600">
-            <Sparkles className="h-5 w-5 text-primary-500" />
-            <span className="font-semibold text-gray-700">Pick-My-AI</span>
-            <span>© 2025 Pick-My-AI. All rights reserved.</span>
+      <footer className="relative border-t border-gray-200/50 glass-card py-10 px-4">
+        <div className="mx-auto max-w-7xl sm:px-6 lg:px-8 space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex items-center justify-center sm:justify-start gap-2 text-gray-600">
+              <Sparkles className="h-5 w-5 text-primary-500" />
+              <span className="font-semibold text-gray-700">Pick-My-AI</span>
+              <span className="text-sm">© 2025 Pick-My-AI. All rights reserved.</span>
+            </div>
+            <div className="flex flex-wrap items-center justify-center gap-4 text-xs text-gray-500">
+              <button onClick={() => router.push('/security')} className="hover:text-green-600 transition-colors flex items-center gap-1">
+                <Shield className="h-3.5 w-3.5" />
+                보안 대시보드
+              </button>
+              <button onClick={() => router.push('/contact')} className="hover:text-blue-600 transition-colors">문의 & FAQ</button>
+              <button onClick={() => router.push('/privacy')} className="hover:text-gray-800 transition-colors">개인정보처리방침</button>
+              <button onClick={() => router.push('/terms')} className="hover:text-gray-800 transition-colors">이용약관</button>
+              <button onClick={() => router.push('/guide')} className="hover:text-gray-800 transition-colors">가이드</button>
+            </div>
           </div>
-          <p className="text-gray-500 text-xs">AI, 이제 고르기도 쉬운 선택</p>
+          <p className="text-center text-xs text-gray-400">AI, 이제 고르기도 쉬운 선택</p>
         </div>
       </footer>
     </div>

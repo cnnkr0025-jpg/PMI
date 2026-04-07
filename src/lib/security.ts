@@ -1,24 +1,32 @@
 // Edge Runtime 호환: Web Crypto API 사용
 // Note: 암호화 기능은 서버 사이드에서만 사용 가능
 
+import { encrypt, decrypt, isEncrypted } from './encryption';
+
 /**
- * API 키 암호화 (서버 사이드 전용)
- * Edge Runtime에서는 암호화 대신 환경 변수 직접 사용 권장
+ * API 키 암호화 (AES-256-GCM)
  */
-export async function encryptApiKey(apiKey: string): Promise<string> {
-  // Edge Runtime에서는 암호화 불가
-  // 프로덕션에서는 환경 변수를 안전하게 관리
-  if (typeof window === 'undefined' && process.env.NODE_ENV === 'production') {
-    console.warn('암호화는 Node.js 런타임에서만 지원됩니다.');
+export function encryptApiKey(apiKey: string): string {
+  if (!apiKey) return '';
+  try {
+    if (!process.env.ENCRYPTION_KEY) return apiKey;
+    return encrypt(apiKey);
+  } catch {
+    return apiKey;
   }
-  return apiKey; // 암호화 없이 반환 (환경 변수는 이미 안전함)
 }
 
 /**
- * API 키 복호화 (서버 사이드 전용)
+ * API 키 복호화 (AES-256-GCM)
  */
-export async function decryptApiKey(encryptedKey: string): Promise<string> {
-  return encryptedKey; // 암호화하지 않았으므로 그대로 반환
+export function decryptApiKey(encryptedKey: string): string {
+  if (!encryptedKey) return '';
+  try {
+    if (isEncrypted(encryptedKey)) return decrypt(encryptedKey);
+    return encryptedKey;
+  } catch {
+    return encryptedKey;
+  }
 }
 
 /**

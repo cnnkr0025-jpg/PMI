@@ -1,0 +1,186 @@
+name: Security & Supply Chain
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master]
+  schedule:
+    - cron: '0 2 * * 1'   # 매주 월요일 새벽 2시 (정기 전체 스캔)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+jobs:
+  # ── 1. npm 의존성 취약점 감사 ──────────────────────────────
+  npm-audit:
+    name: npm audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Run npm audit (high + critical)
+        run: npm audit --audit-level=high --json > npm-audit-report.json || true
+
+      - name: Parse and fail on critical vulnerabilities
+        run: |
+          CRITICAL=$(node -e "
+            const r = require('./npm-audit-report.json');
+            const meta = r.metadata?.vulnerabilities || {};
+            console.log(meta.critical || 0);
+          ")
+          echo "Critical vulnerabilities: $CRITICAL"
+          if [ "$CRITICAL" -gt "0" ]; then
+            echo "::error::Critical npm vulnerabilities found: $CRITICAL"
+            npm audit --audit-level=critical
+            exit 1
+          fi
+
+      - name: Upload audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-audit-report
+          path: npm-audit-report.json
+          retention-days: 30
+
+  # ── 2. Secret 스캐닝 (Gitleaks) ────────────────────────────
+  secret-scan:
+    name: Secret scanning (Gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # 전체 히스토리 스캔
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}   # 선택사항
+
+  # ── 3. CodeQL 정적 분석 (SAST) ─────────────────────────────
+  codeql:
+    name: CodeQL SAST
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [javascript-typescript]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-and-quality
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: '/language:${{ matrix.language }}'
+
+  # ── 4. Dependency Review (PR 시 신규 취약점 감지) ──────────
+  dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+          deny-licenses: GPL-2.0, GPL-3.0, LGPL-2.0, LGPL-2.1
+
+  # ── 5. lockfile 무결성 검증 ─────────────────────────────────
+  lockfile-check:
+    name: Lockfile integrity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Verify package-lock.json is up-to-date
+        run: |
+          npm install --package-lock-only --ignore-scripts
+          if ! git diff --quiet package-lock.json; then
+            echo "::error::package-lock.json is out of date. Run 'npm install' and commit the changes."
+            git diff package-lock.json
+            exit 1
+          fi
+
+  # ── 6. TypeScript 타입 검사 ─────────────────────────────────
+  typecheck:
+    name: TypeScript check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: TypeScript type check
+        run: npx tsc --noEmit --pretty false
+
+  # ── 7. 환경변수 시크릿 노출 검사 ───────────────────────────
+  env-leak-check:
+    name: Env variable leak check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for hardcoded secrets patterns
+        run: |
+          echo "Scanning for potential hardcoded secrets..."
+          PATTERNS=(
+            "sk-[a-zA-Z0-9]{32,}"
+            "AIza[0-9A-Za-z\\-_]{35}"
+            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.[a-zA-Z0-9_-]+"
+            "ghp_[a-zA-Z0-9]{36}"
+            "SUPABASE_SERVICE_ROLE_KEY\s*=\s*['\"]?[a-zA-Z0-9]"
+          )
+          FOUND=0
+          for PATTERN in "${PATTERNS[@]}"; do
+            MATCHES=$(grep -rE "$PATTERN" \
+              --include="*.ts" --include="*.tsx" --include="*.js" --include="*.json" \
+              --exclude-dir=".git" --exclude-dir="node_modules" --exclude-dir=".next" \
+              . 2>/dev/null | grep -v ".env" | grep -v "test" || true)
+            if [ -n "$MATCHES" ]; then
+              echo "::warning::Potential hardcoded secret found:"
+              echo "$MATCHES"
+              FOUND=1
+            fi
+          done
+          if [ "$FOUND" -eq "1" ]; then
+            echo "::error::Potential hardcoded secrets detected. Review and remove them."
+            exit 1
+          fi
+          echo "No hardcoded secrets found."
