@@ -4,7 +4,7 @@
  * Body: { pendingToken, code }
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { jwtVerify, SignJWT } from 'jose';
+import { jwtVerify } from 'jose';
 import { verifyMfaCode } from '@/lib/mfa';
 import {
   ADMIN_COOKIE_NAME,
@@ -23,15 +23,6 @@ const SECRET_KEY = process.env.ADMIN_JWT_SECRET || process.env.JWT_SECRET || '';
 function getPendingKey(): Uint8Array {
   if (!SECRET_KEY || SECRET_KEY.length < 32) throw new Error('JWT 키 미설정');
   return new TextEncoder().encode(`pending:${SECRET_KEY}`);
-}
-
-/** 비밀번호 검증 후 MFA 대기 중인 임시 토큰 생성 (3분 유효) */
-async function generateMfaPendingToken(adminPath: string): Promise<string> {
-  return new SignJWT({ role: 'mfa-pending', adminPath })
-    .setProtectedHeader({ alg: 'HS256' })
-    .setIssuedAt()
-    .setExpirationTime('3m')
-    .sign(getPendingKey());
 }
 
 export async function POST(request: NextRequest) {

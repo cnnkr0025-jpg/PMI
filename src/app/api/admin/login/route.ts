@@ -11,7 +11,7 @@ import {
   setNoStoreHeaders,
 } from '@/lib/serverSecurity';
 import { isMfaEnabled } from '@/lib/mfa';
-import { generateMfaPendingToken } from '@/app/api/admin/mfa/verify/route';
+import { generateMfaPendingToken } from '@/lib/adminMfa';
 import { evaluateRisk, recordAdminBurst } from '@/lib/riskScore';
 
 export async function POST(request: NextRequest) {
