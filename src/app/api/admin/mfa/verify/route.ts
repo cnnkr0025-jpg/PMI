@@ -26,7 +26,7 @@ function getPendingKey(): Uint8Array {
 }
 
 /** 비밀번호 검증 후 MFA 대기 중인 임시 토큰 생성 (3분 유효) */
-export async function generateMfaPendingToken(adminPath: string): Promise<string> {
+async function generateMfaPendingToken(adminPath: string): Promise<string> {
   return new SignJWT({ role: 'mfa-pending', adminPath })
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
