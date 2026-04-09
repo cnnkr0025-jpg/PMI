@@ -1,8 +1,10 @@
 'use client';
 
-import { useState } from 'react';
-import { MessageSquare, ArrowLeft, Clock, CheckCircle, ChevronDown, ChevronUp, AlertCircle, Zap, Users, Send, Bot } from 'lucide-react';
+import { useState, useCallback } from 'react';
+import { ArrowLeft, ChevronDown, ChevronUp, Send, Clock } from 'lucide-react';
 import Link from 'next/link';
+import { useStore } from '@/store';
+import { toast } from 'sonner';
 
 const faqCategories = [
   {
@@ -59,25 +61,32 @@ const faqCategories = [
 ];
 
 const slaInfo = [
-  { period: '평일 (9:00~18:00)', time: '30분~1시간', level: 'high' },
-  { period: '평일 (18:00~익일)', time: '1~3시간', level: 'medium' },
-  { period: '주말 / 공휴일', time: '3~8시간', level: 'low' },
+  { period: '평일 (9:00~18:00)', time: '30분~1시간' },
+  { period: '평일 (18:00~익일)', time: '1~3시간' },
+  { period: '주말 / 공휴일', time: '3~8시간' },
 ];
 
-function getCurrentInquiryStatus(): { label: string; color: string; dot: string; desc: string } {
+function getInquiryLoad() {
   const hour = new Date().getHours();
   const day = new Date().getDay();
-  const isWeekend = day === 0 || day === 6;
-  if (isWeekend) return { label: '낮음', color: 'text-green-600', dot: 'bg-green-500', desc: '빠른 답변 가능' };
-  if (hour >= 9 && hour < 13) return { label: '보통', color: 'text-blue-600', dot: 'bg-blue-500', desc: '평균 대기 중' };
-  if (hour >= 13 && hour < 18) return { label: '낮음', color: 'text-green-600', dot: 'bg-green-500', desc: '빠른 답변 가능' };
-  return { label: '낮음', color: 'text-green-600', dot: 'bg-green-500', desc: '빠른 답변 가능' };
+  if (day === 0 || day === 6) return '낮음';
+  if (hour >= 9 && hour < 13) return '보통';
+  if (hour >= 13 && hour < 18) return '낮음';
+  return '낮음';
 }
 
 export default function ContactPage() {
   const [openIndex, setOpenIndex] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>('전체');
-  const inquiryStatus = getCurrentInquiryStatus();
+  const [type, setType] = useState<'question' | 'suggestion' | 'bug'>('question');
+  const [title, setTitle] = useState('');
+  const [content, setContent] = useState('');
+  const [isSending, setIsSending] = useState(false);
+  const [sent, setSent] = useState(false);
+
+  const isAuthenticated = useStore((s) => s.isAuthenticated);
+  const submitFeedback = useStore((s) => s.submitFeedback);
+  const inquiryLoad = getInquiryLoad();
 
   const categories = ['전체', ...faqCategories.map((c) => c.category)];
   const filteredFaq =
@@ -85,192 +94,106 @@ export default function ContactPage() {
       ? faqCategories
       : faqCategories.filter((c) => c.category === selectedCategory);
 
-  const toggle = (key: string) => {
-    setOpenIndex((prev) => (prev === key ? null : key));
-  };
+  const toggle = (key: string) => setOpenIndex((prev) => (prev === key ? null : key));
+
+  const handleSubmit = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title.trim() || !content.trim()) return;
+    setIsSending(true);
+    try {
+      const ok = await submitFeedback({ type, title, content, screenshots: [] });
+      if (!ok) {
+        toast.error('문의 전송에 실패했습니다.');
+        return;
+      }
+      setSent(true);
+      setTitle('');
+      setContent('');
+      toast.success('문의가 접수되었습니다. 빠르게 답변드리겠습니다.');
+    } finally {
+      setIsSending(false);
+    }
+  }, [type, title, content, submitFeedback]);
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
-        <div className="max-w-4xl mx-auto px-6 py-4 flex items-center gap-4">
-          <Link
-            href="/"
-            className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors"
-          >
+    <div className="min-h-screen bg-white">
+      <header className="border-b border-gray-100 sticky top-0 z-10 bg-white">
+        <div className="max-w-3xl mx-auto px-6 py-4 flex items-center gap-3">
+          <Link href="/" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 transition-colors">
             <ArrowLeft className="w-4 h-4" />
-            <span className="text-sm font-medium">홈으로</span>
+            홈
           </Link>
-          <div className="h-5 w-px bg-gray-200" />
-          <div className="flex items-center gap-2">
-            <MessageSquare className="w-4 h-4 text-blue-600" />
-            <span className="font-bold text-gray-900 text-sm">문의 & FAQ</span>
-          </div>
+          <span className="text-gray-200">/</span>
+          <span className="text-sm text-gray-700">문의</span>
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto px-6 py-12 space-y-14">
-        <div className="space-y-4">
-          <div className="flex flex-wrap gap-2">
-            <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-50 border border-blue-100 rounded-full">
-              <Zap className="w-4 h-4 text-blue-600" />
-              <span className="text-sm font-semibold text-blue-700">빠른 응답 보장</span>
-            </div>
-            <div className="inline-flex items-center gap-2 px-4 py-2 bg-gray-50 border border-gray-100 rounded-full">
-              <span className={`w-2 h-2 rounded-full ${inquiryStatus.dot} animate-pulse`} />
-              <span className="text-sm font-semibold text-gray-600">
-                현재 문의량: <span className={inquiryStatus.color}>{inquiryStatus.label}</span>
-              </span>
-              <span className="text-xs text-gray-400">{inquiryStatus.desc}</span>
-            </div>
+      <main className="max-w-3xl mx-auto px-6 py-10 space-y-12">
+        {/* 헤더 */}
+        <div className="space-y-2">
+          <h1 className="text-2xl font-semibold text-gray-900">문의 & FAQ</h1>
+          <div className="flex items-center gap-2 text-xs text-gray-400">
+            <span className={`w-1.5 h-1.5 rounded-full inline-block ${
+              inquiryLoad === '낮음' ? 'bg-green-400' : 'bg-yellow-400'
+            } animate-pulse`} />
+            현재 문의량: {inquiryLoad}
           </div>
-          <h1 className="text-4xl font-black text-gray-900">문의 & FAQ</h1>
-          <p className="text-lg text-gray-500">
-            자주 묻는 질문을 먼저 확인해 보세요. 대부분의 문제는 바로 해결됩니다.
-          </p>
         </div>
 
-        {/* 자동 확인 메시지 UI 미리보기 */}
-        <section className="space-y-4">
-          <h2 className="text-lg font-black text-gray-900 flex items-center gap-2">
-            <Bot className="w-5 h-5 text-blue-600" />
-            문의 접수 즉시 자동 확인
+        {/* 응답 시간 */}
+        <section className="space-y-3">
+          <h2 className="text-sm font-medium text-gray-500 uppercase tracking-wide flex items-center gap-2">
+            <Clock className="w-3.5 h-3.5" />
+            응답 시간
           </h2>
-          <div className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
-            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-5 py-3 flex items-center gap-2">
-              <MessageSquare className="w-4 h-4 text-white" />
-              <span className="text-white text-sm font-bold">Pick-My-AI 고객 지원</span>
-              <span className="ml-auto text-white/70 text-xs">방금 전</span>
-            </div>
-            <div className="p-5 space-y-3">
-              <div className="flex items-start gap-3">
-                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
-                  <Bot className="w-4 h-4 text-blue-600" />
-                </div>
-                <div className="bg-blue-50 rounded-2xl rounded-tl-sm px-4 py-3 max-w-sm">
-                  <p className="text-sm text-gray-800 font-medium">문의 확인 완료!</p>
-                  <p className="text-xs text-gray-500 mt-1 leading-relaxed">
-                    안녕하세요! 문의가 정상적으로 접수되었습니다.<br />
-                    현재 예상 응답 시간은 <span className="font-semibold text-blue-600">30분 이내</span>입니다.
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3">
-                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
-                  <Bot className="w-4 h-4 text-blue-600" />
-                </div>
-                <div className="bg-blue-50 rounded-2xl rounded-tl-sm px-4 py-3 max-w-sm">
-                  <p className="text-xs text-gray-600 leading-relaxed">
-                    비슷한 문제로 많이 문의하시는 내용을 먼저 확인해 보시겠어요?
-                  </p>
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {['결제 오류', '로그인 문제', '크레딧 미반영'].map(tag => (
-                      <span key={tag} className="px-2 py-1 bg-white border border-blue-200 text-blue-600 text-xs rounded-lg font-medium cursor-pointer hover:bg-blue-50">
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </div>
-              <p className="text-xs text-gray-400 text-center pt-1">
-                문의 접수 시 위와 같은 자동 확인 메시지가 즉시 발송됩니다.
-              </p>
-            </div>
-          </div>
-        </section>
-
-        <section className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm space-y-5">
-          <div className="flex items-center gap-3">
-            <Clock className="w-5 h-5 text-blue-600" />
-            <h2 className="text-lg font-black text-gray-900">응답 시간 안내</h2>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="divide-y divide-gray-100 border border-gray-100 rounded-xl overflow-hidden">
             {slaInfo.map((item) => (
-              <div
-                key={item.period}
-                className={`rounded-xl p-4 text-center space-y-1 ${
-                  item.level === 'high'
-                    ? 'bg-green-50 border border-green-100'
-                    : item.level === 'medium'
-                    ? 'bg-blue-50 border border-blue-100'
-                    : 'bg-gray-50 border border-gray-100'
-                }`}
-              >
-                <p className="text-xs font-semibold text-gray-500">{item.period}</p>
-                <p
-                  className={`text-xl font-black ${
-                    item.level === 'high'
-                      ? 'text-green-600'
-                      : item.level === 'medium'
-                      ? 'text-blue-600'
-                      : 'text-gray-600'
-                  }`}
-                >
-                  {item.time}
-                </p>
+              <div key={item.period} className="flex items-center justify-between px-4 py-3 bg-white">
+                <span className="text-sm text-gray-600">{item.period}</span>
+                <span className="text-sm text-gray-800">{item.time}</span>
               </div>
             ))}
           </div>
-
-          <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-100 rounded-xl">
-            <AlertCircle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
-            <p className="text-xs text-amber-700 leading-relaxed">
-              문의 접수 즉시 자동 확인 메시지가 발송되며, 위 기준보다 빠르게 답변드리기 위해 노력합니다.
-              현재 문의량이 많을 경우 다소 늦어질 수 있습니다.
-            </p>
-          </div>
+          <p className="text-xs text-gray-400 px-1">문의 접수 즉시 자동 확인 메시지가 발송됩니다.</p>
         </section>
 
-        <section className="space-y-6">
-          <h2 className="text-2xl font-black text-gray-900">자주 묻는 질문</h2>
-
-          <div className="flex flex-wrap gap-2">
+        {/* 자주 묻는 질문 */}
+        <section className="space-y-3">
+          <h2 className="text-sm font-medium text-gray-500 uppercase tracking-wide">자주 묻는 질문</h2>
+          <div className="flex flex-wrap gap-1.5">
             {categories.map((cat) => (
               <button
                 key={cat}
                 onClick={() => setSelectedCategory(cat)}
-                className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-colors ${
+                className={`px-3 py-1 rounded-full text-xs transition-colors ${
                   selectedCategory === cat
                     ? 'bg-gray-900 text-white'
-                    : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+                    : 'border border-gray-200 text-gray-500 hover:bg-gray-50'
                 }`}
               >
                 {cat}
               </button>
             ))}
           </div>
-
-          <div className="space-y-3">
+          <div className="divide-y divide-gray-100 border border-gray-100 rounded-xl overflow-hidden">
             {filteredFaq.map((cat) =>
               cat.items.map((item, idx) => {
                 const key = `${cat.category}-${idx}`;
                 const isOpen = openIndex === key;
                 return (
-                  <div
-                    key={key}
-                    className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden"
-                  >
+                  <div key={key} className="bg-white">
                     <button
                       onClick={() => toggle(key)}
-                      className="w-full flex items-center justify-between gap-4 p-5 text-left hover:bg-gray-50 transition-colors"
+                      className="w-full flex items-center justify-between gap-4 px-4 py-3.5 text-left hover:bg-gray-50 transition-colors"
                     >
-                      <div className="flex items-start gap-3 min-w-0">
-                        <span className="flex-shrink-0 w-5 h-5 rounded-full bg-blue-100 text-blue-700 text-xs flex items-center justify-center font-bold mt-0.5">
-                          Q
-                        </span>
-                        <span className="text-sm font-semibold text-gray-900">{item.q}</span>
-                      </div>
-                      {isOpen ? (
-                        <ChevronUp className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                      ) : (
-                        <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                      )}
+                      <span className="text-sm text-gray-800">{item.q}</span>
+                      {isOpen
+                        ? <ChevronUp className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                        : <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />}
                     </button>
                     {isOpen && (
-                      <div className="px-5 pb-5 pt-0">
-                        <div className="flex items-start gap-3 pl-8">
-                          <p className="text-sm text-gray-600 leading-relaxed">{item.a}</p>
-                        </div>
+                      <div className="px-4 pb-4">
+                        <p className="text-sm text-gray-500 leading-relaxed">{item.a}</p>
                       </div>
                     )}
                   </div>
@@ -280,33 +203,85 @@ export default function ContactPage() {
           </div>
         </section>
 
-        <section className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl p-8 text-white space-y-5">
-          <div className="flex items-center gap-3">
-            <MessageSquare className="w-5 h-5" />
-            <h2 className="text-xl font-black">직접 문의하기</h2>
-          </div>
-          <p className="text-blue-100 text-sm leading-relaxed">
-            FAQ에서 해결되지 않으셨나요? 로그인 후 피드백 메뉴를 통해 문의 주시면 빠르게 답변드립니다.
-          </p>
-          <div className="flex flex-wrap gap-3">
-            <Link
-              href="/login"
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-white text-blue-600 text-sm font-bold rounded-xl hover:bg-blue-50 transition-colors"
-            >
-              <CheckCircle className="w-4 h-4" />
-              로그인 후 문의하기
-            </Link>
-            <Link
-              href="/"
-              className="inline-flex items-center gap-2 px-5 py-2.5 border border-white/40 text-white text-sm font-semibold rounded-xl hover:bg-white/10 transition-colors"
-            >
-              홈으로 돌아가기
-            </Link>
-          </div>
+        {/* 직접 문의 */}
+        <section className="space-y-3">
+          <h2 className="text-sm font-medium text-gray-500 uppercase tracking-wide">직접 문의</h2>
+
+          {isAuthenticated ? (
+            sent ? (
+              <div className="border border-gray-100 rounded-xl p-6 text-center space-y-2">
+                <p className="text-sm text-gray-800">문의가 접수되었습니다.</p>
+                <p className="text-xs text-gray-400">응답 시간 내에 답변드리겠습니다.</p>
+                <button
+                  onClick={() => setSent(false)}
+                  className="mt-3 text-xs text-gray-500 hover:text-gray-800 underline-offset-2 hover:underline"
+                >
+                  새 문의 작성
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleSubmit} className="border border-gray-100 rounded-xl overflow-hidden">
+                <div className="divide-y divide-gray-100">
+                  <div className="px-4 py-3">
+                    <select
+                      value={type}
+                      onChange={(e) => setType(e.target.value as typeof type)}
+                      className="w-full text-sm text-gray-700 bg-transparent outline-none"
+                    >
+                      <option value="question">문의 / 질문</option>
+                      <option value="suggestion">건의 / 개선 제안</option>
+                      <option value="bug">오류 / 버그 신고</option>
+                    </select>
+                  </div>
+                  <div className="px-4 py-3">
+                    <input
+                      value={title}
+                      onChange={(e) => setTitle(e.target.value)}
+                      placeholder="제목"
+                      required
+                      className="w-full text-sm text-gray-800 placeholder-gray-400 bg-transparent outline-none"
+                    />
+                  </div>
+                  <div className="px-4 py-3">
+                    <textarea
+                      value={content}
+                      onChange={(e) => setContent(e.target.value)}
+                      placeholder="문의 내용을 입력하세요."
+                      required
+                      rows={4}
+                      maxLength={900}
+                      className="w-full text-sm text-gray-800 placeholder-gray-400 bg-transparent outline-none resize-none"
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
+                  <span className="text-xs text-gray-400">{content.length} / 900</span>
+                  <button
+                    type="submit"
+                    disabled={isSending || !title.trim() || !content.trim()}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-gray-900 text-white text-xs rounded-lg hover:bg-gray-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                    {isSending ? '전송 중...' : '문의 보내기'}
+                  </button>
+                </div>
+              </form>
+            )
+          ) : (
+            <div className="border border-gray-100 rounded-xl p-6 space-y-3">
+              <p className="text-sm text-gray-600">로그인 후 직접 문의를 보낼 수 있습니다.</p>
+              <Link
+                href="/login"
+                className="inline-block px-4 py-2 bg-gray-900 text-white text-sm rounded-lg hover:bg-gray-700 transition-colors"
+              >
+                로그인하기
+              </Link>
+            </div>
+          )}
         </section>
       </main>
 
-      <footer className="border-t border-gray-200 py-8 px-6 text-center">
+      <footer className="border-t border-gray-100 py-6 px-6 text-center">
         <p className="text-xs text-gray-400">© 2025 Pick-My-AI. All rights reserved.</p>
       </footer>
     </div>
