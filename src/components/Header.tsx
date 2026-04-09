@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { User as UserIcon, LogOut, Vote, Globe, Info } from 'lucide-react';
+import { User as UserIcon, LogOut, Vote, Globe, Info, Shield } from 'lucide-react';
 import { useStore } from '@/store';
 import { Button } from './ui/Button';
 import { LogoMark } from './LogoMark';
@@ -139,6 +139,23 @@ export const Header = React.memo(() => {
                   onTouchStart={() => router.prefetch('/guide')}
                   className={`px-3 py-2 rounded-lg text-sm transition-colors ${pathname === '/guide' ? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white font-medium' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white'}`}
                 >가이드</Link>
+                <Link
+                  href="/security"
+                  prefetch
+                  onMouseEnter={() => router.prefetch('/security')}
+                  onTouchStart={() => router.prefetch('/security')}
+                  className={`px-3 py-2 rounded-lg text-sm transition-colors flex items-center gap-1 ${pathname === '/security' ? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white font-medium' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white'}`}
+                >
+                  <Shield className="w-3.5 h-3.5 text-green-500" />
+                  보안
+                </Link>
+                <Link
+                  href="/contact"
+                  prefetch
+                  onMouseEnter={() => router.prefetch('/contact')}
+                  onTouchStart={() => router.prefetch('/contact')}
+                  className={`px-3 py-2 rounded-lg text-sm transition-colors ${pathname === '/contact' ? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white font-medium' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white'}`}
+                >문의</Link>
                 <button
                   onClick={() => setIsPollModalOpen(true)}
                   className="px-3 py-2 rounded-lg text-sm transition-colors text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white flex items-center gap-1 relative"
@@ -178,6 +195,11 @@ export const Header = React.memo(() => {
               </>
             ) : (
               <>
+                <Link href="/security" className="px-3 py-2 text-sm text-gray-500 hover:text-gray-800 transition-colors hidden sm:inline-flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" />
+                  보안
+                </Link>
+                <Link href="/contact" className="px-3 py-2 text-sm text-gray-500 hover:text-gray-800 transition-colors hidden sm:block">문의</Link>
                 <Link href="/login" className="px-4 py-2 text-sm text-gray-700 hover:text-gray-900 transition-colors">로그인</Link>
                 <Link href="/login" className="px-4 py-2 bg-primary text-primary-foreground text-sm rounded-lg hover:opacity-90 transition-all">회원가입</Link>
               </>

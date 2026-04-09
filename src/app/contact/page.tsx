@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { MessageSquare, ArrowLeft, Clock, CheckCircle, ChevronDown, ChevronUp, AlertCircle, Zap } from 'lucide-react';
+import { MessageSquare, ArrowLeft, Clock, CheckCircle, ChevronDown, ChevronUp, AlertCircle, Zap, Users, Send, Bot } from 'lucide-react';
 import Link from 'next/link';
 
 const faqCategories = [
@@ -64,9 +64,20 @@ const slaInfo = [
   { period: '주말 / 공휴일', time: '3~8시간', level: 'low' },
 ];
 
+function getCurrentInquiryStatus(): { label: string; color: string; dot: string; desc: string } {
+  const hour = new Date().getHours();
+  const day = new Date().getDay();
+  const isWeekend = day === 0 || day === 6;
+  if (isWeekend) return { label: '낮음', color: 'text-green-600', dot: 'bg-green-500', desc: '빠른 답변 가능' };
+  if (hour >= 9 && hour < 13) return { label: '보통', color: 'text-blue-600', dot: 'bg-blue-500', desc: '평균 대기 중' };
+  if (hour >= 13 && hour < 18) return { label: '낮음', color: 'text-green-600', dot: 'bg-green-500', desc: '빠른 답변 가능' };
+  return { label: '낮음', color: 'text-green-600', dot: 'bg-green-500', desc: '빠른 답변 가능' };
+}
+
 export default function ContactPage() {
   const [openIndex, setOpenIndex] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>('전체');
+  const inquiryStatus = getCurrentInquiryStatus();
 
   const categories = ['전체', ...faqCategories.map((c) => c.category)];
   const filteredFaq =
@@ -98,16 +109,74 @@ export default function ContactPage() {
       </header>
 
       <main className="max-w-4xl mx-auto px-6 py-12 space-y-14">
-        <div className="space-y-3">
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-50 border border-blue-100 rounded-full">
-            <Zap className="w-4 h-4 text-blue-600" />
-            <span className="text-sm font-semibold text-blue-700">빠른 응답 보장</span>
+        <div className="space-y-4">
+          <div className="flex flex-wrap gap-2">
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-50 border border-blue-100 rounded-full">
+              <Zap className="w-4 h-4 text-blue-600" />
+              <span className="text-sm font-semibold text-blue-700">빠른 응답 보장</span>
+            </div>
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-gray-50 border border-gray-100 rounded-full">
+              <span className={`w-2 h-2 rounded-full ${inquiryStatus.dot} animate-pulse`} />
+              <span className="text-sm font-semibold text-gray-600">
+                현재 문의량: <span className={inquiryStatus.color}>{inquiryStatus.label}</span>
+              </span>
+              <span className="text-xs text-gray-400">{inquiryStatus.desc}</span>
+            </div>
           </div>
           <h1 className="text-4xl font-black text-gray-900">문의 & FAQ</h1>
           <p className="text-lg text-gray-500">
             자주 묻는 질문을 먼저 확인해 보세요. 대부분의 문제는 바로 해결됩니다.
           </p>
         </div>
+
+        {/* 자동 확인 메시지 UI 미리보기 */}
+        <section className="space-y-4">
+          <h2 className="text-lg font-black text-gray-900 flex items-center gap-2">
+            <Bot className="w-5 h-5 text-blue-600" />
+            문의 접수 즉시 자동 확인
+          </h2>
+          <div className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
+            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-5 py-3 flex items-center gap-2">
+              <MessageSquare className="w-4 h-4 text-white" />
+              <span className="text-white text-sm font-bold">Pick-My-AI 고객 지원</span>
+              <span className="ml-auto text-white/70 text-xs">방금 전</span>
+            </div>
+            <div className="p-5 space-y-3">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
+                  <Bot className="w-4 h-4 text-blue-600" />
+                </div>
+                <div className="bg-blue-50 rounded-2xl rounded-tl-sm px-4 py-3 max-w-sm">
+                  <p className="text-sm text-gray-800 font-medium">문의 확인 완료!</p>
+                  <p className="text-xs text-gray-500 mt-1 leading-relaxed">
+                    안녕하세요! 문의가 정상적으로 접수되었습니다.<br />
+                    현재 예상 응답 시간은 <span className="font-semibold text-blue-600">30분 이내</span>입니다.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
+                  <Bot className="w-4 h-4 text-blue-600" />
+                </div>
+                <div className="bg-blue-50 rounded-2xl rounded-tl-sm px-4 py-3 max-w-sm">
+                  <p className="text-xs text-gray-600 leading-relaxed">
+                    비슷한 문제로 많이 문의하시는 내용을 먼저 확인해 보시겠어요?
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {['결제 오류', '로그인 문제', '크레딧 미반영'].map(tag => (
+                      <span key={tag} className="px-2 py-1 bg-white border border-blue-200 text-blue-600 text-xs rounded-lg font-medium cursor-pointer hover:bg-blue-50">
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <p className="text-xs text-gray-400 text-center pt-1">
+                문의 접수 시 위와 같은 자동 확인 메시지가 즉시 발송됩니다.
+              </p>
+            </div>
+          </div>
+        </section>
 
         <section className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm space-y-5">
           <div className="flex items-center gap-3">

@@ -1,4 +1,4 @@
-import { Shield, Lock, Trash2, EyeOff, Server, CheckCircle, AlertCircle, Eye, ArrowLeft } from 'lucide-react';
+import { Shield, Lock, Trash2, EyeOff, Server, CheckCircle, AlertCircle, Eye, ArrowLeft, ToggleRight, Zap, Gift } from 'lucide-react';
 import Link from 'next/link';
 
 export const metadata = {
@@ -104,10 +104,16 @@ export default function SecurityPage() {
       </header>
 
       <main className="max-w-5xl mx-auto px-6 py-12 space-y-16">
-        <div className="space-y-3">
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-green-50 border border-green-100 rounded-full">
-            <CheckCircle className="w-4 h-4 text-green-600" />
-            <span className="text-sm font-semibold text-green-700">모든 보안 항목 정상</span>
+        <div className="space-y-4">
+          <div className="flex flex-wrap gap-2">
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-green-50 border border-green-100 rounded-full">
+              <CheckCircle className="w-4 h-4 text-green-600" />
+              <span className="text-sm font-semibold text-green-700">모든 보안 항목 정상</span>
+            </div>
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-50 border border-blue-100 rounded-full">
+              <Zap className="w-4 h-4 text-blue-600" />
+              <span className="text-sm font-semibold text-blue-700">실시간 모니터링 중</span>
+            </div>
           </div>
           <h1 className="text-4xl font-black text-gray-900">보안 대시보드</h1>
           <p className="text-lg text-gray-500 max-w-2xl">
@@ -115,6 +121,124 @@ export default function SecurityPage() {
             약속이 아닌 시스템으로 신뢰를 증명합니다.
           </p>
         </div>
+
+        {/* 핵심 보안 약속 카드 */}
+        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {[
+            { icon: Lock, label: '전송·저장 암호화', desc: 'HTTPS TLS 1.2+\n전구간 암호화', color: 'text-green-600 bg-green-50 border-green-100' },
+            { icon: EyeOff, label: '외부 공유 없음', desc: '데이터 판매·공유\n0건', color: 'text-blue-600 bg-blue-50 border-blue-100' },
+            { icon: Trash2, label: '자동 삭제', desc: '설정에서 직접\n삭제 가능', color: 'text-purple-600 bg-purple-50 border-purple-100' },
+            { icon: Shield, label: 'AI 학습 미사용', desc: '대화 내용\nAI 학습 불사용', color: 'text-orange-600 bg-orange-50 border-orange-100' },
+          ].map(({ icon: Icon, label, desc, color }) => (
+            <div key={label} className={`rounded-2xl border p-5 text-center space-y-3 ${color.split(' ').slice(1).join(' ')}`}>
+              <div className={`mx-auto w-10 h-10 rounded-xl flex items-center justify-center bg-white/80`}>
+                <Icon className={`w-5 h-5 ${color.split(' ')[0]}`} />
+              </div>
+              <div>
+                <p className="font-bold text-gray-900 text-sm">{label}</p>
+                <p className="text-xs text-gray-500 mt-1 whitespace-pre-line">{desc}</p>
+              </div>
+            </div>
+          ))}
+        </section>
+
+        {/* 프라이버시 컨트롤 UI */}
+        <section className="space-y-5">
+          <div>
+            <h2 className="text-2xl font-black text-gray-900">내 데이터 제어</h2>
+            <p className="text-sm text-gray-500 mt-1">로그인 후 설정에서 직접 제어할 수 있습니다.</p>
+          </div>
+          <div className="bg-white border border-gray-100 rounded-2xl shadow-sm divide-y divide-gray-100">
+            {/* 대화 저장 안함 토글 */}
+            <div className="flex items-center justify-between gap-4 p-5">
+              <div className="flex items-start gap-4 min-w-0">
+                <div className="flex-shrink-0 w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center">
+                  <ToggleRight className="w-5 h-5 text-indigo-600" />
+                </div>
+                <div className="min-w-0">
+                  <p className="font-bold text-gray-900 text-sm">대화 저장 안함 모드</p>
+                  <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
+                    ON 시: 대화 로그 미저장 · 분석 안함 · 세션 종료 시 즉시 삭제
+                  </p>
+                </div>
+              </div>
+              <Link
+                href="/login"
+                className="flex-shrink-0 px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-xl hover:bg-indigo-700 transition-colors"
+              >
+                설정하기
+              </Link>
+            </div>
+            {/* 즉시 삭제 */}
+            <div className="flex items-center justify-between gap-4 p-5">
+              <div className="flex items-start gap-4 min-w-0">
+                <div className="flex-shrink-0 w-10 h-10 rounded-xl bg-red-50 flex items-center justify-center">
+                  <Trash2 className="w-5 h-5 text-red-500" />
+                </div>
+                <div className="min-w-0">
+                  <p className="font-bold text-gray-900 text-sm">대화 내역 즉시 삭제</p>
+                  <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
+                    버튼 클릭 즉시 모든 대화 내역이 영구 삭제됩니다. 복구 불가.
+                  </p>
+                </div>
+              </div>
+              <Link
+                href="/login"
+                className="flex-shrink-0 px-4 py-2 bg-red-50 text-red-600 border border-red-200 text-xs font-bold rounded-xl hover:bg-red-100 transition-colors"
+              >
+                삭제하기
+              </Link>
+            </div>
+            {/* 자동 삭제 */}
+            <div className="flex items-center justify-between gap-4 p-5">
+              <div className="flex items-start gap-4 min-w-0">
+                <div className="flex-shrink-0 w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center">
+                  <CheckCircle className="w-5 h-5 text-green-600" />
+                </div>
+                <div className="min-w-0">
+                  <p className="font-bold text-gray-900 text-sm">자동 삭제 주기 설정</p>
+                  <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
+                    7일 / 30일 / 90일 중 선택. 설정 주기 도래 시 자동 삭제.
+                  </p>
+                </div>
+              </div>
+              <Link
+                href="/login"
+                className="flex-shrink-0 px-4 py-2 bg-green-50 text-green-700 border border-green-200 text-xs font-bold rounded-xl hover:bg-green-100 transition-colors"
+              >
+                설정하기
+              </Link>
+            </div>
+            {/* 계정 탈퇴 */}
+            <div className="flex items-center justify-between gap-4 p-5">
+              <div className="flex items-start gap-4 min-w-0">
+                <div className="flex-shrink-0 w-10 h-10 rounded-xl bg-gray-50 flex items-center justify-center">
+                  <EyeOff className="w-5 h-5 text-gray-500" />
+                </div>
+                <div className="min-w-0">
+                  <p className="font-bold text-gray-900 text-sm">계정 및 데이터 완전 삭제</p>
+                  <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
+                    탈퇴 시 개인 식별 데이터 즉시 삭제. 법령 보관 의무 데이터는 기간 후 삭제.
+                  </p>
+                </div>
+              </div>
+              <Link
+                href="/login"
+                className="flex-shrink-0 px-4 py-2 bg-gray-50 text-gray-600 border border-gray-200 text-xs font-bold rounded-xl hover:bg-gray-100 transition-colors"
+              >
+                탈퇴 신청
+              </Link>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-3 p-4 rounded-xl bg-amber-50 border border-amber-100">
+            <AlertCircle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+            <p className="text-xs text-amber-700 leading-relaxed">
+              대화 저장 안함 모드는 로그인 후 설정 메뉴에서 활성화할 수 있습니다.
+              이 모드를 사용하면 대화 이력이 서버에 저장되지 않아 기기 간 동기화가 제한됩니다.
+            </p>
+          </div>
+        </section>
 
         <section className="space-y-6">
           <h2 className="text-2xl font-black text-gray-900">보안 항목 현황</h2>
