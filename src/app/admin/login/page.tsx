@@ -21,17 +21,11 @@ export default function AdminLoginPage() {
   const [isChecking, setIsChecking] = useState(true);
 
   useEffect(() => {
-    const providedKey = searchParams.get('key');
-    fetch('/api/admin/config')
+    const providedKey = searchParams.get('key') || '';
+    fetch(`/api/admin/config?key=${encodeURIComponent(providedKey)}`)
       .then(r => r.ok ? r.json() : null)
       .then(data => {
-        if (!data) { router.replace('/404'); return; }
-        const secretPath: string = data.adminPath || '';
-        const canUseStaticAdminPath = secretPath === 'admin';
-        if (!secretPath || (!canUseStaticAdminPath && (!providedKey || providedKey !== secretPath))) {
-          router.replace('/404');
-          return;
-        }
+        if (!data || !data.valid) { router.replace('/404'); return; }
         setIsAuthorized(true);
         setIsChecking(false);
       })
