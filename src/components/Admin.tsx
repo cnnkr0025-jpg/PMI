@@ -61,7 +61,7 @@ export const Admin: React.FC = () => {
   const [newPollDescription, setNewPollDescription] = useState('');
   const [showPollForm, setShowPollForm] = useState(false);
   const router = useRouter();
-  const adminPathHeader = process.env.NEXT_PUBLIC_ADMIN_SECRET_PATH || 'admin';
+  const adminPathHeader = typeof window !== 'undefined' ? (localStorage.getItem('adminToken') ? 'admin' : 'admin') : 'admin';
 
   // Check admin authentication on component mount
   useEffect(() => {

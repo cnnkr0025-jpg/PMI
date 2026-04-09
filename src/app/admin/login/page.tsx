@@ -21,24 +21,28 @@ export default function AdminLoginPage() {
   const [isChecking, setIsChecking] = useState(true);
 
   useEffect(() => {
-    const secretPath = process.env.NEXT_PUBLIC_ADMIN_SECRET_PATH;
     const providedKey = searchParams.get('key');
-    const canUseStaticAdminPath = secretPath === 'admin';
-
-    if (!secretPath || (!canUseStaticAdminPath && (!providedKey || providedKey !== secretPath))) {
-      router.replace('/404');
-      return;
-    }
-
-    setIsAuthorized(true);
-    setIsChecking(false);
+    fetch('/api/admin/config')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data) { router.replace('/404'); return; }
+        const secretPath: string = data.adminPath || '';
+        const canUseStaticAdminPath = secretPath === 'admin';
+        if (!secretPath || (!canUseStaticAdminPath && (!providedKey || providedKey !== secretPath))) {
+          router.replace('/404');
+          return;
+        }
+        setIsAuthorized(true);
+        setIsChecking(false);
+      })
+      .catch(() => router.replace('/404'));
   }, [searchParams, router]);
 
   const handlePasswordSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsLoading(true);
     try {
-      const adminPathHeader = process.env.NEXT_PUBLIC_ADMIN_SECRET_PATH || 'admin';
+      const adminPathHeader = searchParams.get('key') || 'admin';
       const response = await csrfFetch('/api/admin/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-admin-path': adminPathHeader },
@@ -74,7 +78,7 @@ export default function AdminLoginPage() {
     e.preventDefault();
     setIsLoading(true);
     try {
-      const adminPathHeader = process.env.NEXT_PUBLIC_ADMIN_SECRET_PATH || 'admin';
+      const adminPathHeader = searchParams.get('key') || 'admin';
       const response = await csrfFetch('/api/admin/mfa/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-admin-path': adminPathHeader },

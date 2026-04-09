@@ -16,15 +16,7 @@ export default function SecretAdminLoginPage() {
   const [lockedUntil, setLockedUntil] = useState<number | null>(null);
   const [timeLeft, setTimeLeft] = useState<string>('');
 
-  // 비밀 경로 확인
-  const secretPath = process.env.NEXT_PUBLIC_ADMIN_SECRET_PATH;
   const adminPath = params.adminPath as string;
-
-  useEffect(() => {
-    if (secretPath && adminPath !== secretPath) {
-      router.replace('/404');
-    }
-  }, [adminPath, secretPath, router]);
 
   // 잠금 타이머
   useEffect(() => {
@@ -101,10 +93,6 @@ export default function SecretAdminLoginPage() {
       setPassword('');
     }
   };
-
-  if (secretPath && adminPath !== secretPath) {
-    return null;
-  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black flex items-center justify-center p-4">

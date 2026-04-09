@@ -88,7 +88,7 @@ export function sanitizeText(input: unknown, maxLength: number): string {
 }
 
 export function getAdminSecretPath(): string {
-  return sanitizeAdminPath(process.env.ADMIN_SECRET_PATH || process.env.NEXT_PUBLIC_ADMIN_SECRET_PATH || '');
+  return sanitizeAdminPath(process.env.ADMIN_SECRET_PATH || '');
 }
 
 export function sanitizeAdminPath(path: string): string {

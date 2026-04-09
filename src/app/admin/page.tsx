@@ -16,18 +16,21 @@ export default function AdminPage() {
   const [isChecking, setIsChecking] = useState(true);
 
   useEffect(() => {
-    const secretPath = process.env.NEXT_PUBLIC_ADMIN_SECRET_PATH;
     const providedKey = searchParams.get('key');
-    const canUseStaticAdminPath = secretPath === 'admin';
-
-    // 비밀 경로가 설정되지 않았거나 키가 일치하지 않으면 404로 리다이렉트
-    if (!secretPath || (!canUseStaticAdminPath && (!providedKey || providedKey !== secretPath))) {
-      router.replace('/404');
-      return;
-    }
-
-    setIsAuthorized(true);
-    setIsChecking(false);
+    fetch('/api/admin/config')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data) { router.replace('/404'); return; }
+        const secretPath: string = data.adminPath || '';
+        const canUseStaticAdminPath = secretPath === 'admin';
+        if (!secretPath || (!canUseStaticAdminPath && (!providedKey || providedKey !== secretPath))) {
+          router.replace('/404');
+          return;
+        }
+        setIsAuthorized(true);
+        setIsChecking(false);
+      })
+      .catch(() => router.replace('/404'));
   }, [searchParams, router]);
 
   if (isChecking) {
