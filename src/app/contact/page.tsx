@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { ArrowLeft, ChevronDown, ChevronUp, Send, Clock } from 'lucide-react';
 import Link from 'next/link';
 import { useStore } from '@/store';
@@ -17,10 +17,6 @@ const faqCategories = [
       {
         q: '크레딧이 충전됐는데 반영이 안 돼요.',
         a: '결제 완료 후 최대 1~2분 내에 자동 반영됩니다. 5분 이상 지나도 반영되지 않는다면, 결제 확인 이메일과 함께 문의해 주시면 즉시 처리해 드립니다.',
-      },
-      {
-        q: '환불은 어떻게 신청하나요?',
-        a: '미사용 크레딧에 대해 결제일로부터 7일 이내 환불을 신청하실 수 있습니다. 이용 약관 기준에 따라 처리됩니다. 문의 채널로 접수해 주세요.',
       },
     ],
   },
@@ -54,39 +50,37 @@ const faqCategories = [
       },
       {
         q: '어떤 AI 모델을 선택해야 하나요?',
-        a: '용도에 따라 다릅니다. 빠른 답변이 필요하면 GPT-4o mini, 깊이 있는 분석은 Claude Sonnet, 자료 조사는 Perplexity를 추천합니다. 가이드 페이지에서 더 자세한 비교를 확인해 보세요.',
+        a: '용도에 따라 다릅니다. 빠른 답변이 필요하면 GPT-5, 깊이 있는 분석은 Claude Sonnet, 자료 조사는 Perplexity를 추천합니다. 가이드 페이지에서 더 자세한 비교를 확인해 보세요.',
       },
     ],
   },
 ];
 
 const slaInfo = [
-  { period: '평일 (9:00~18:00)', time: '30분~1시간' },
-  { period: '평일 (18:00~익일)', time: '1~3시간' },
-  { period: '주말 / 공휴일', time: '3~8시간' },
+  { period: '평일 오후 4시 ~ 자정', time: '3시간 이내', note: '운영 시간 내 빠른 답변' },
+  { period: '토요일', time: '오후 11시 전후', note: '토요일 답변 보장' },
+  { period: '일요일 오전 10시 ~ 오후 8시', time: '3시간 이내', note: '일요일도 운영' },
 ];
-
-function getInquiryLoad() {
-  const hour = new Date().getHours();
-  const day = new Date().getDay();
-  if (day === 0 || day === 6) return '낮음';
-  if (hour >= 9 && hour < 13) return '보통';
-  if (hour >= 13 && hour < 18) return '낮음';
-  return '낮음';
-}
 
 export default function ContactPage() {
   const [openIndex, setOpenIndex] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>('전체');
-  const [type, setType] = useState<'question' | 'suggestion' | 'bug'>('question');
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [sent, setSent] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
 
   const isAuthenticated = useStore((s) => s.isAuthenticated);
+  const currentUser = useStore((s) => s.currentUser);
   const submitFeedback = useStore((s) => s.submitFeedback);
-  const inquiryLoad = getInquiryLoad();
+  const feedbacks = useStore((s) => s.feedbacks);
+
+  useEffect(() => { setHydrated(true); }, []);
+
+  const myInquiries = feedbacks.filter(
+    (f) => f.type === 'question' && currentUser && f.createdBy?.userId === currentUser.id
+  );
 
   const categories = ['전체', ...faqCategories.map((c) => c.category)];
   const filteredFaq =
@@ -101,7 +95,7 @@ export default function ContactPage() {
     if (!title.trim() || !content.trim()) return;
     setIsSending(true);
     try {
-      const ok = await submitFeedback({ type, title, content, screenshots: [] });
+      const ok = await submitFeedback({ type: 'question', title, content, screenshots: [] });
       if (!ok) {
         toast.error('문의 전송에 실패했습니다.');
         return;
@@ -113,7 +107,7 @@ export default function ContactPage() {
     } finally {
       setIsSending(false);
     }
-  }, [type, title, content, submitFeedback]);
+  }, [title, content, submitFeedback]);
 
   return (
     <div className="min-h-screen bg-white">
@@ -132,29 +126,27 @@ export default function ContactPage() {
         {/* 헤더 */}
         <div className="space-y-2">
           <h1 className="text-2xl font-semibold text-gray-900">문의 & FAQ</h1>
-          <div className="flex items-center gap-2 text-xs text-gray-400">
-            <span className={`w-1.5 h-1.5 rounded-full inline-block ${
-              inquiryLoad === '낮음' ? 'bg-green-400' : 'bg-yellow-400'
-            } animate-pulse`} />
-            현재 문의량: {inquiryLoad}
-          </div>
+          <p className="text-sm text-gray-500">자주 묻는 질문을 먼저 확인해 보세요.</p>
         </div>
 
         {/* 응답 시간 */}
         <section className="space-y-3">
           <h2 className="text-sm font-medium text-gray-500 uppercase tracking-wide flex items-center gap-2">
             <Clock className="w-3.5 h-3.5" />
-            응답 시간
+            답변 시간 안내
           </h2>
           <div className="divide-y divide-gray-100 border border-gray-100 rounded-xl overflow-hidden">
             {slaInfo.map((item) => (
-              <div key={item.period} className="flex items-center justify-between px-4 py-3 bg-white">
+              <div key={item.period} className="flex items-center justify-between gap-2 px-4 py-3 bg-white">
                 <span className="text-sm text-gray-600">{item.period}</span>
-                <span className="text-sm text-gray-800">{item.time}</span>
+                <div className="text-right">
+                  <span className="text-sm text-gray-800">{item.time}</span>
+                  <span className="text-xs text-gray-400 ml-2">{item.note}</span>
+                </div>
               </div>
             ))}
           </div>
-          <p className="text-xs text-gray-400 px-1">문의 접수 즉시 자동 확인 메시지가 발송됩니다.</p>
+          <p className="text-xs text-gray-400 px-1">문의 접수 즉시 자동 확인 메시지가 발송되며, 위 시간 이내에 답변드립니다.</p>
         </section>
 
         {/* 자주 묻는 질문 */}
@@ -207,11 +199,15 @@ export default function ContactPage() {
         <section className="space-y-3">
           <h2 className="text-sm font-medium text-gray-500 uppercase tracking-wide">직접 문의</h2>
 
-          {isAuthenticated ? (
+          {!hydrated ? (
+            <div className="border border-gray-100 rounded-xl p-6 text-center">
+              <p className="text-sm text-gray-400">로딩 중...</p>
+            </div>
+          ) : isAuthenticated && currentUser ? (
             sent ? (
               <div className="border border-gray-100 rounded-xl p-6 text-center space-y-2">
                 <p className="text-sm text-gray-800">문의가 접수되었습니다.</p>
-                <p className="text-xs text-gray-400">응답 시간 내에 답변드리겠습니다.</p>
+                <p className="text-xs text-gray-400">답변 시간 내에 답변드리겠습니다.</p>
                 <button
                   onClick={() => setSent(false)}
                   className="mt-3 text-xs text-gray-500 hover:text-gray-800 underline-offset-2 hover:underline"
@@ -222,17 +218,6 @@ export default function ContactPage() {
             ) : (
               <form onSubmit={handleSubmit} className="border border-gray-100 rounded-xl overflow-hidden">
                 <div className="divide-y divide-gray-100">
-                  <div className="px-4 py-3">
-                    <select
-                      value={type}
-                      onChange={(e) => setType(e.target.value as typeof type)}
-                      className="w-full text-sm text-gray-700 bg-transparent outline-none"
-                    >
-                      <option value="question">문의 / 질문</option>
-                      <option value="suggestion">건의 / 개선 제안</option>
-                      <option value="bug">오류 / 버그 신고</option>
-                    </select>
-                  </div>
                   <div className="px-4 py-3">
                     <input
                       value={title}
@@ -279,6 +264,43 @@ export default function ContactPage() {
             </div>
           )}
         </section>
+
+        {/* 내 문의 내역 */}
+        {hydrated && isAuthenticated && currentUser && myInquiries.length > 0 && (
+          <section className="space-y-3">
+            <h2 className="text-sm font-medium text-gray-500 uppercase tracking-wide">내 문의 내역</h2>
+            <div className="divide-y divide-gray-100 border border-gray-100 rounded-xl overflow-hidden">
+              {myInquiries.slice(0, 10).map((item) => (
+                <div key={item.id} className="px-4 py-3.5 bg-white space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm text-gray-800 truncate">{item.title}</p>
+                    <span className={`flex-shrink-0 text-xs px-2 py-0.5 rounded-full ${
+                      item.status === 'resolved'
+                        ? 'bg-green-50 text-green-600 border border-green-100'
+                        : 'bg-gray-50 text-gray-500 border border-gray-100'
+                    }`}>
+                      {item.status === 'resolved' ? '답변 완료' : '대기 중'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-400">
+                    {new Date(item.createdAt).toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                  {item.reply && (
+                    <div className="mt-2 p-3 bg-gray-50 rounded-lg">
+                      <p className="text-xs text-gray-500 mb-1">답변</p>
+                      <p className="text-sm text-gray-700 leading-relaxed">{item.reply}</p>
+                      {item.repliedAt && (
+                        <p className="text-xs text-gray-400 mt-1">
+                          {new Date(item.repliedAt).toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
       </main>
 
       <footer className="border-t border-gray-100 py-6 px-6 text-center">

@@ -1,4 +1,4 @@
-import { Shield, Lock, Trash2, EyeOff, Server, CheckCircle, Eye, ArrowLeft } from 'lucide-react';
+import { Shield, Lock, Trash2, EyeOff, Server, CheckCircle, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 
 export const metadata = {
@@ -41,13 +41,6 @@ const securityItems = [
     status: '최신',
     description: '보안 패치 및 의존성 업데이트를 정기적으로 적용하여 최신 보안 상태를 유지합니다.',
     detail: '정기 패치 적용 중',
-  },
-  {
-    icon: Eye,
-    title: '로그 저장 정책',
-    status: '최소 수집',
-    description: '서비스 개선 및 오류 분석에 필요한 최소한의 접속 로그만 수집합니다. 대화 내용은 분석에 사용되지 않습니다.',
-    detail: '서비스 오류 로그 / 대화 내용 분석 없음',
   },
 ];
 
@@ -157,6 +150,9 @@ export default function SecurityPage() {
               );
             })}
           </div>
+          <p className="text-xs text-gray-400 px-1">
+            위 항목 외에도 Rate Limiting, CSRF 방어, JWT 인증, IP 블랙리스트, 버스트 탐지, 허니팟 트래핑 등 <span className="text-gray-600">100개 이상의 보안 규칙</span>이 적용되어 있습니다.
+          </p>
         </section>
 
         {/* 내 데이터 제어 */}

@@ -11,6 +11,7 @@ import { useTranslation } from '@/utils/translations';
 
 // 동적 임포트
 const DarkModeToggle = dynamic(() => import('@/components/DarkModeToggle').then(mod => ({ default: mod.DarkModeToggle })), { ssr: false });
+const AutoDeleteSettings = dynamic(() => import('@/components/AutoDeleteSettings').then(mod => ({ default: mod.AutoDeleteSettings })), { ssr: false });
 
 export function SettingsForm() {
   const { themeSettings, setThemeSettings, settings, toggleSuccessNotifications, speechLevel, setSpeechLevel } = useStore();
@@ -225,6 +226,13 @@ export function SettingsForm() {
           <p className="mt-4 text-sm text-gray-600 dark:text-gray-400">
             선택한 색상: <span className="font-medium text-gray-900 dark:text-gray-100">{colorThemes.find(ct => ct.value === selectedTheme) ? t.settings[colorThemes.find(ct => ct.value === selectedTheme)!.nameKey] : ''}</span>
           </p>
+        </div>
+      </div>
+
+      {/* 자동 삭제 설정 */}
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 settings-card">
+        <div className="p-6">
+          <AutoDeleteSettings />
         </div>
       </div>
 

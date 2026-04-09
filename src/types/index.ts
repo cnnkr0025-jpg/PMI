@@ -312,6 +312,8 @@ export interface FeedbackItem {
   content: string;
   screenshots?: string[]; // data URLs
   status: FeedbackStatus;
+  reply?: string;
+  repliedAt?: Date;
   createdBy: { userId: string; email: string; name?: string };
   createdAt: Date;
 }
