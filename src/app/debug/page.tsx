@@ -37,8 +37,13 @@ export default function DebugPage() {
     addLog('로컬 스토리지 확인 중...');
     const storage = localStorage.getItem('pick-my-ai-storage');
     if (storage) {
-      const parsed = JSON.parse(storage);
-      addLog(`📦 저장된 데이터: ${JSON.stringify(parsed, null, 2)}`);
+      try {
+        const parsed = JSON.parse(storage);
+        addLog(`📦 저장된 데이터: ${JSON.stringify(parsed, null, 2)}`);
+      } catch (e) {
+        addLog('❌ 로컬 스토리지 데이터 손상됨');
+        console.error('localStorage parse error:', e);
+      }
     } else {
       addLog('❌ 로컬 스토리지 비어있음');
     }

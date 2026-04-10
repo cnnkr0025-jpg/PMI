@@ -898,7 +898,11 @@ export const Chat: React.FC = () => {
   }, [currentSessionId, chatSessions.length, createChatSession]);
 
   useEffect(() => {
-    if (!currentSessionId && chatSessions.length > 0) {
+    if (chatSessions.length === 0) {
+      return;
+    }
+
+    if (!currentSessionId || !chatSessions.some((session) => session.id === currentSessionId)) {
       setCurrentSession(chatSessions[0].id);
     }
   }, [currentSessionId, chatSessions, setCurrentSession]);
@@ -2959,8 +2963,16 @@ export const Chat: React.FC = () => {
                     if (sendButtonSound && message.trim() && !isLoading && !streamingRef.current) {
                       try {
                         const audio = new Audio(sendButtonSound);
-                        audio.play().catch(() => {});
-                      } catch {}
+                        audio.play().catch((err) => {
+                          if (process.env.NODE_ENV !== 'production') {
+                            console.error('[Chat] Audio play failed:', err);
+                          }
+                        });
+                      } catch (err) {
+                        if (process.env.NODE_ENV !== 'production') {
+                          console.error('[Chat] Audio creation failed:', err);
+                        }
+                      }
                     }
                     handleSendMessage();
                   }}

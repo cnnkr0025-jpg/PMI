@@ -1392,21 +1392,51 @@ export const useStore = create<AppState>()(
         const cutoffDate = new Date();
         cutoffDate.setDate(cutoffDate.getDate() - state.autoDelete.deleteAfterDays);
         
-        set((state) => ({
-          chatSessions: state.chatSessions.filter(session => {
-            // Keep if newer than cutoff
-            if (session.updatedAt > cutoffDate) return true;
-            
-            // Keep if starred (if implemented)
-            // if (state.autoDelete.excludeStarred && session.starred) return true;
-            
+        set((state) => {
+          const remainingSessions = state.chatSessions.filter((session) => {
+            const updatedAt = new Date(session.updatedAt);
+            if (Number.isNaN(updatedAt.getTime())) return true;
+            if (updatedAt > cutoffDate) return true;
+            if (state.autoDelete.excludeStarred && session.isStarred) return true;
             return false;
-          }),
-          autoDelete: {
-            ...state.autoDelete,
-            lastCleanup: new Date(),
-          },
-        }));
+          });
+
+          let nextCurrentSessionId = state.currentSessionId;
+          if (!nextCurrentSessionId || !remainingSessions.some((session) => session.id === nextCurrentSessionId)) {
+            nextCurrentSessionId = remainingSessions[0]?.id || null;
+          }
+
+          let nextLastChatSessionCreatedAt = state.lastChatSessionCreatedAt;
+          if (!nextCurrentSessionId) {
+            const now = Date.now();
+            let title = '새 대화';
+            if (state.language === 'en') {
+              title = 'New Chat';
+            } else if (state.language === 'ja') {
+              title = '新しいチャット';
+            }
+
+            remainingSessions.push({
+              id: now.toString(),
+              title,
+              messages: [],
+              createdAt: new Date(now),
+              updatedAt: new Date(now),
+            });
+            nextCurrentSessionId = now.toString();
+            nextLastChatSessionCreatedAt = now;
+          }
+
+          return {
+            chatSessions: remainingSessions,
+            currentSessionId: nextCurrentSessionId,
+            lastChatSessionCreatedAt: nextLastChatSessionCreatedAt,
+            autoDelete: {
+              ...state.autoDelete,
+              lastCleanup: new Date(),
+            },
+          };
+        });
       },
       
       // 스트리밍 관련 액션

@@ -61,12 +61,26 @@ export const Admin: React.FC = () => {
   const [newPollDescription, setNewPollDescription] = useState('');
   const [showPollForm, setShowPollForm] = useState(false);
   const router = useRouter();
-  const adminPathHeader = typeof window !== 'undefined' ? (localStorage.getItem('adminToken') ? 'admin' : 'admin') : 'admin';
+  const adminPathHeader = typeof window !== 'undefined' ? (() => {
+    try {
+      return localStorage.getItem('adminToken') ? 'admin' : 'admin';
+    } catch {
+      return 'admin';
+    }
+  })() : 'admin';
 
   // Check admin authentication on component mount
   useEffect(() => {
-    const isAdminAuthenticated = localStorage.getItem('adminAuthenticated') === 'true';
-    const tokenExpiry = localStorage.getItem('adminTokenExpiry');
+    let isAdminAuthenticated = false;
+    let tokenExpiry: string | null = null;
+    try {
+      isAdminAuthenticated = localStorage.getItem('adminAuthenticated') === 'true';
+      tokenExpiry = localStorage.getItem('adminTokenExpiry');
+    } catch {
+      // localStorage 접근 실패 시 로그인 페이지로 리다이렉트
+      router.push('/admin/login');
+      return;
+    }
     
     // 토큰 만료 체크
     if (tokenExpiry && Date.now() > parseInt(tokenExpiry)) {
@@ -87,13 +101,17 @@ export const Admin: React.FC = () => {
     
     // 주기적으로 토큰 만료 체크 (1분마다)
     const interval = setInterval(() => {
-      const expiry = localStorage.getItem('adminTokenExpiry');
-      if (expiry && Date.now() > parseInt(expiry)) {
-        localStorage.removeItem('adminAuthenticated');
-        localStorage.removeItem('adminToken');
-        localStorage.removeItem('adminTokenExpiry');
-        toast.error('세션이 만료되었습니다. 다시 로그인해주세요.');
-        router.push('/admin/login');
+      try {
+        const expiry = localStorage.getItem('adminTokenExpiry');
+        if (expiry && Date.now() > parseInt(expiry)) {
+          localStorage.removeItem('adminAuthenticated');
+          localStorage.removeItem('adminToken');
+          localStorage.removeItem('adminTokenExpiry');
+          toast.error('세션이 만료되었습니다. 다시 로그인해주세요.');
+          router.push('/admin/login');
+        }
+      } catch {
+        // localStorage 접근 실패 시 무시 (다음 체크 시 다시 시도)
       }
     }, 60000); // 1분마다 체크
     
@@ -186,9 +204,16 @@ export const Admin: React.FC = () => {
   const fetchUsers = async () => {
     setLoadingUsers(true);
     try {
+      let adminToken = 'admin-token';
+      try {
+        const stored = localStorage.getItem('adminToken');
+        if (stored) adminToken = stored;
+      } catch {
+        // localStorage 접근 실패 시 기본값 사용
+      }
       const response = await fetch('/api/admin/users', {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('adminToken') || 'admin-token'}`,
+          'Authorization': `Bearer ${adminToken}`,
           'x-admin-path': adminPathHeader,
         }
       });
@@ -209,11 +234,18 @@ export const Admin: React.FC = () => {
   // 유저 크레딧 수정
   const updateUserCredits = async (userId: string, credits: Record<string, number>) => {
     try {
+      let adminToken = 'admin-token';
+      try {
+        const stored = localStorage.getItem('adminToken');
+        if (stored) adminToken = stored;
+      } catch {
+        // localStorage 접근 실패 시 기본값 사용
+      }
       const response = await csrfFetch('/api/admin/users', {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('adminToken') || 'admin-token'}`,
+          'Authorization': `Bearer ${adminToken}`,
           'x-admin-path': adminPathHeader,
         },
         body: JSON.stringify({ userId, credits })
@@ -929,11 +961,18 @@ export const Admin: React.FC = () => {
                         }
 
                         try {
+                          let adminToken = 'admin-token';
+                          try {
+                            const stored = localStorage.getItem('adminToken');
+                            if (stored) adminToken = stored;
+                          } catch {
+                            // localStorage 접근 실패 시 기본값 사용
+                          }
                           const response = await fetch('/api/admin/database', {
                             method: 'POST',
                             headers: {
                               'Content-Type': 'application/json',
-                              'Authorization': `Bearer ${localStorage.getItem('adminToken')}`,
+                              'Authorization': `Bearer ${adminToken}`,
                               'x-admin-path': adminPathHeader,
                             },
                             body: JSON.stringify({

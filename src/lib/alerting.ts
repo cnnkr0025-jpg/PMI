@@ -141,8 +141,16 @@ export function sendSecurityAlert(payload: AlertPayload): void {
   if (payload.severity !== 'critical' && isThrottled(payload.title)) return;
 
   // 논블로킹으로 전송
-  sendDiscordAlert(payload).catch(() => {});
-  sendSlackAlert(payload).catch(() => {});
+  sendDiscordAlert(payload).catch((err) => {
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('[alerting] Discord alert failed:', err);
+    }
+  });
+  sendSlackAlert(payload).catch((err) => {
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('[alerting] Slack alert failed:', err);
+    }
+  });
 }
 
 /**

@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import dynamic from 'next/dynamic';
+import { cookies } from 'next/headers';
 
 export const metadata: Metadata = {
   title: '사용 가이드 | Pick-My-AI',
@@ -31,6 +32,9 @@ const GuideClient = dynamic(() => import('./GuideClient'), {
   ssr: false,
 });
 
-export default function GuidePage() {
-  return <GuideClient />;
+export default async function GuidePage() {
+  const cookieStore = await cookies();
+  const hasSession = Boolean(cookieStore.get('session')?.value);
+
+  return <GuideClient hidePromoBanner={hasSession} />;
 }

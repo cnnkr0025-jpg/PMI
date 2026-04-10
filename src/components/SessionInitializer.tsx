@@ -106,13 +106,33 @@ export function SessionInitializer() {
 
           // 서버 데이터(지갑/설정) + 채팅 세션을 병렬로 로드
           const [userDataMod, chatSyncMod] = await Promise.all([
-            import('@/lib/userDataSync').catch(() => null),
-            import('@/lib/chatSync').catch(() => null),
+            import('@/lib/userDataSync').catch((err) => {
+              if (process.env.NODE_ENV !== 'production') {
+                console.error('[SessionInitializer] userDataSync import failed:', err);
+              }
+              return null;
+            }),
+            import('@/lib/chatSync').catch((err) => {
+              if (process.env.NODE_ENV !== 'production') {
+                console.error('[SessionInitializer] chatSync import failed:', err);
+              }
+              return null;
+            }),
           ]);
 
           const [userData, sessionsResult] = await Promise.all([
-            userDataMod ? userDataMod.loadUserData().catch(() => null) : Promise.resolve(null),
-            chatSyncMod ? chatSyncMod.ChatSyncService.loadChatSessions().catch(() => null) : Promise.resolve(null),
+            userDataMod ? userDataMod.loadUserData().catch((err) => {
+              if (process.env.NODE_ENV !== 'production') {
+                console.error('[SessionInitializer] loadUserData failed:', err);
+              }
+              return null;
+            }) : Promise.resolve(null),
+            chatSyncMod ? chatSyncMod.ChatSyncService.loadChatSessions().catch((err) => {
+              if (process.env.NODE_ENV !== 'production') {
+                console.error('[SessionInitializer] loadChatSessions failed:', err);
+              }
+              return null;
+            }) : Promise.resolve(null),
           ]);
 
           // 사용자 데이터(지갑 + 설정) 처리

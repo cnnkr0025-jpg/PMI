@@ -139,21 +139,6 @@ export const Header = React.memo(() => {
                   onTouchStart={() => router.prefetch('/guide')}
                   className={`px-3 py-2 rounded-lg text-sm transition-colors ${pathname === '/guide' ? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white font-medium' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white'}`}
                 >가이드</Link>
-                <Link
-                  href="/security"
-                  prefetch
-                  onMouseEnter={() => router.prefetch('/security')}
-                  onTouchStart={() => router.prefetch('/security')}
-                  className={`px-3 py-2 rounded-lg text-sm transition-colors ${pathname === '/security' ? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white font-medium' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white'}`}
-                >보안
-                </Link>
-                <Link
-                  href="/contact"
-                  prefetch
-                  onMouseEnter={() => router.prefetch('/contact')}
-                  onTouchStart={() => router.prefetch('/contact')}
-                  className={`px-3 py-2 rounded-lg text-sm transition-colors ${pathname === '/contact' ? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white font-medium' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white'}`}
-                >문의</Link>
                 <button
                   onClick={() => setIsPollModalOpen(true)}
                   className="px-3 py-2 rounded-lg text-sm transition-colors text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white flex items-center gap-1 relative"
@@ -193,8 +178,6 @@ export const Header = React.memo(() => {
               </>
             ) : (
               <>
-                <Link href="/security" className="px-3 py-2 text-sm text-gray-500 hover:text-gray-800 transition-colors hidden sm:block">보안</Link>
-                <Link href="/contact" className="px-3 py-2 text-sm text-gray-500 hover:text-gray-800 transition-colors hidden sm:block">문의</Link>
                 <Link href="/login" className="px-4 py-2 text-sm text-gray-700 hover:text-gray-900 transition-colors">로그인</Link>
                 <Link href="/login" className="px-4 py-2 bg-primary text-primary-foreground text-sm rounded-lg hover:opacity-90 transition-all">회원가입</Link>
               </>
