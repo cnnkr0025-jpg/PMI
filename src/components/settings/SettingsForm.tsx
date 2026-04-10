@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStore } from '@/store';
 import { toast } from 'sonner';
-import { Palette, Paintbrush, Moon, MessageCircle } from 'lucide-react';
+import { Palette, Paintbrush, Moon, MessageCircle, Trash2 } from 'lucide-react';
 import type { ThemeColor } from '@/types';
 import dynamic from 'next/dynamic';
 import { useTranslation } from '@/utils/translations';
@@ -13,7 +13,7 @@ import { useTranslation } from '@/utils/translations';
 const DarkModeToggle = dynamic(() => import('@/components/DarkModeToggle').then(mod => ({ default: mod.DarkModeToggle })), { ssr: false });
 
 export function SettingsForm() {
-  const { themeSettings, setThemeSettings, settings, toggleSuccessNotifications, speechLevel, setSpeechLevel } = useStore();
+  const { themeSettings, setThemeSettings, settings, toggleSuccessNotifications, speechLevel, setSpeechLevel, autoDelete, setAutoDelete, performAutoDelete } = useStore();
   const router = useRouter();
   const { t } = useTranslation();
   
@@ -225,6 +225,93 @@ export function SettingsForm() {
           <p className="mt-4 text-sm text-gray-600 dark:text-gray-400">
             선택한 색상: <span className="font-medium text-gray-900 dark:text-gray-100">{colorThemes.find(ct => ct.value === selectedTheme) ? t.settings[colorThemes.find(ct => ct.value === selectedTheme)!.nameKey] : ''}</span>
           </p>
+        </div>
+      </div>
+
+      {/* 자동 삭제 설정 */}
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 settings-card">
+        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 rounded-lg bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+              <Trash2 className="w-5 h-5 text-red-600 dark:text-red-400" />
+            </div>
+            <div>
+              <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">대화 자동 삭제</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400">일정 기간이 지난 대화를 자동으로 삭제합니다</p>
+            </div>
+          </div>
+        </div>
+        <div className="p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-gray-900 dark:text-gray-100">자동 삭제 활성화</span>
+            <button
+              type="button"
+              onClick={() => {
+                setAutoDelete({ enabled: !autoDelete.enabled });
+                toast.success(autoDelete.enabled ? '자동 삭제가 비활성화되었습니다.' : '자동 삭제가 활성화되었습니다.');
+              }}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-2 dark:focus:ring-offset-gray-900 ${
+                autoDelete.enabled ? 'bg-red-500' : 'bg-gray-200 dark:bg-gray-600'
+              }`}
+            >
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                autoDelete.enabled ? 'translate-x-6' : 'translate-x-1'
+              }`} />
+            </button>
+          </div>
+
+          {autoDelete.enabled && (
+            <>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">보존 기간</label>
+                <div className="grid grid-cols-4 gap-2">
+                  {[7, 14, 30, 90].map((days) => (
+                    <button
+                      key={days}
+                      type="button"
+                      onClick={() => setAutoDelete({ deleteAfterDays: days })}
+                      className={`py-2 rounded-lg text-sm font-medium border-2 transition-all ${
+                        autoDelete.deleteAfterDays === days
+                          ? 'border-red-500 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300'
+                          : 'border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:border-gray-300'
+                      }`}
+                    >
+                      {days}일
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-sm font-medium text-gray-900 dark:text-gray-100">즐겨찾기 제외</span>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">별표 표시된 대화는 삭제하지 않습니다</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setAutoDelete({ excludeStarred: !autoDelete.excludeStarred })}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-2 dark:focus:ring-offset-gray-900 ${
+                    autoDelete.excludeStarred ? 'bg-red-500' : 'bg-gray-200 dark:bg-gray-600'
+                  }`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    autoDelete.excludeStarred ? 'translate-x-6' : 'translate-x-1'
+                  }`} />
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  performAutoDelete();
+                  toast.success(`${autoDelete.deleteAfterDays}일 이전 대화가 삭제되었습니다.`);
+                }}
+                className="w-full py-2.5 px-4 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/40 border border-red-200 dark:border-red-800 rounded-lg font-medium text-sm transition-colors"
+              >
+                지금 바로 삭제 실행
+              </button>
+            </>
+          )}
         </div>
       </div>
 

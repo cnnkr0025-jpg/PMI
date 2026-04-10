@@ -16,19 +16,6 @@ const EARN_RATES = [
   { qty: 5, rate: '10%', label: '5개 이상', highlight: true },
 ];
 
-const PLAN_BONUSES = [
-  { plan: 'Free', bonus: '+0%' },
-  { plan: 'Plus', bonus: '+2%' },
-  { plan: 'Pro', bonus: '+5%' },
-  { plan: 'Max', bonus: '+7%' },
-];
-
-const TOKEN_BUDGETS = [
-  { name: 'GPT 시리즈', budget: '입력 500 / 출력 500 토큰' },
-  { name: 'Claude 시리즈', budget: '입력 1,000 / 출력 1,000 토큰' },
-  { name: 'Perplexity', budget: '입력 300 / 출력 300 토큰' },
-  { name: 'Gemini', budget: '입력 500 / 출력 500 토큰' },
-];
 
 export const PMCInfoModal: React.FC<PMCInfoModalProps> = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
@@ -92,36 +79,18 @@ export const PMCInfoModal: React.FC<PMCInfoModalProps> = ({ isOpen, onClose }) =
                   </div>
                 ))}
               </div>
-              <p className="text-xs text-gray-400">
-                고가 모델(Opus 등 high 티어)은 역마진 방지를 위해 적립 상한이 5%로 제한됩니다.
-              </p>
-            </section>
-
-            {/* 플랜 보너스 */}
-            <section className="space-y-3">
-              <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 uppercase tracking-wide">플랜별 추가 적립</h3>
-              <div className="grid grid-cols-4 gap-2">
-                {PLAN_BONUSES.map(({ plan, bonus }) => (
-                  <div key={plan} className="border border-gray-100 dark:border-gray-800 rounded-xl p-3 text-center">
-                    <p className="text-xs text-gray-400 mb-1">{plan}</p>
-                    <p className="text-sm font-bold text-gray-900 dark:text-white">{bonus}</p>
-                  </div>
-                ))}
-              </div>
-              <p className="text-xs text-gray-400">플랜 보너스는 기본 적립률에 더해집니다. 전체 적립률은 수수료율(11.9%)을 초과하지 않습니다.</p>
             </section>
 
             {/* 계산 예시 */}
             <section className="space-y-3">
               <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 uppercase tracking-wide">계산 예시</h3>
               <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4 space-y-2 text-sm">
-                <p className="text-gray-600 dark:text-gray-300">GPT-4o(10원) + Claude Sonnet 4.5(45원) 동시 선택 — Plus 플랜</p>
+                <p className="text-gray-600 dark:text-gray-300">GPT-4o(10원) + Claude Sonnet 4.5(45원) 동시 선택</p>
                 <div className="border-t border-gray-200 dark:border-gray-700 pt-2 space-y-1 text-xs text-gray-500 dark:text-gray-400">
                   <p>기본 적립률: 3% × (2 − 1) = 3%</p>
-                  <p>플랜 보너스: +2% → 합계 5%</p>
-                  <p>GPT-4o: 10 × 5% = 0.5 PMC</p>
-                  <p>Sonnet 4.5: 45 × 5% = 2.25 PMC</p>
-                  <p className="font-semibold text-gray-700 dark:text-gray-300 pt-1">총 적립: 2 PMC (소수점 버림)</p>
+                  <p>GPT-4o: 10 × 3% = 0.3 PMC</p>
+                  <p>Sonnet 4.5: 45 × 3% = 1.35 PMC</p>
+                  <p className="font-semibold text-gray-700 dark:text-gray-300 pt-1">총 적립: 1 PMC (소수점 버림)</p>
                 </div>
               </div>
             </section>
@@ -144,18 +113,6 @@ export const PMCInfoModal: React.FC<PMCInfoModalProps> = ({ isOpen, onClose }) =
               </div>
             </section>
 
-            {/* 1회 토큰 예산 */}
-            <section className="space-y-3">
-              <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 uppercase tracking-wide">1회 토큰 예산</h3>
-              <div className="border border-gray-100 dark:border-gray-800 rounded-xl overflow-hidden">
-                {TOKEN_BUDGETS.map(({ name, budget }, i) => (
-                  <div key={name} className={`flex items-center justify-between px-4 py-3 text-sm ${i !== TOKEN_BUDGETS.length - 1 ? 'border-b border-gray-100 dark:border-gray-800' : ''}`}>
-                    <span className="text-gray-600 dark:text-gray-300">{name}</span>
-                    <span className="text-gray-500 dark:text-gray-400 text-xs">{budget}</span>
-                  </div>
-                ))}
-              </div>
-            </section>
           </div>
 
           {/* 푸터 */}

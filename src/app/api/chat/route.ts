@@ -1281,17 +1281,16 @@ Example style:
     const applyLanguageInstruction = (inputMessages: any[]) => {
       const idx = inputMessages.findIndex((m: any) => m?.role === 'system');
       
-      // 요약이 있으면 전체 메시지 대신 요약만 사용
+      // 요약이 있으면 오래된 메시지를 요약으로 대체하되, 최근 6개는 그대로 유지
       let contextMessages = inputMessages;
-      if (conversationSummary && inputMessages.length > 1) {
-        // 마지막 사용자 메시지만 유지하고 나머지는 요약으로 대체
-        const lastUserMessage = inputMessages[inputMessages.length - 1];
+      if (conversationSummary && inputMessages.length > 7) {
+        const recentMessages = inputMessages.slice(-6);
         contextMessages = [
           {
             role: 'system',
             content: `Previous conversation summary:\n${conversationSummary}`
           },
-          lastUserMessage
+          ...recentMessages
         ];
       }
       

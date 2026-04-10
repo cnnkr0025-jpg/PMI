@@ -1,4 +1,4 @@
-import { Shield, Lock, EyeOff, Server, KeyRound, ShieldAlert, Timer, Database, ArrowLeft } from 'lucide-react';
+import { Shield, Lock, EyeOff, Server, KeyRound, ShieldAlert, Timer, Database, ArrowLeft, Users, Code2, FileKey, HardDrive, Smartphone } from 'lucide-react';
 import Link from 'next/link';
 import { InquiryForm } from '@/components/InquiryForm';
 
@@ -47,6 +47,31 @@ const securityTechs = [
     icon: EyeOff,
     title: '외부 데이터 판매 없음',
     description: '사용자의 대화 내용, 결제 정보, 개인정보는 제3자에게 판매하거나 마케팅 목적으로 공유하지 않습니다.',
+  },
+  {
+    icon: Users,
+    title: 'RBAC 역할 기반 접근제어',
+    description: '사용자·관리자·시스템 역할을 엄격히 분리합니다. 각 역할은 최소 권한 원칙에 따라 허용된 리소스에만 접근할 수 있으며, 권한 상승 시도는 서버 레이어에서 차단됩니다.',
+  },
+  {
+    icon: Code2,
+    title: 'DOMPurify XSS 방어',
+    description: '사용자 입력과 AI 응답에 포함된 스크립트·이벤트 핸들러를 렌더링 전에 무해화합니다. 마크다운 렌더링 파이프라인 전 단계에 DOMPurify 정제를 적용하여 저장형·반사형 XSS를 차단합니다.',
+  },
+  {
+    icon: FileKey,
+    title: 'HMAC-SHA256 요청 서명',
+    description: '관리자 API 및 크리티컬 작업 요청에 HMAC-SHA256 서명 검증을 적용합니다. 요청 위변조·재전송 공격을 방지하며, 타임스탬프 기반 리플레이 윈도우를 5분으로 제한합니다.',
+  },
+  {
+    icon: HardDrive,
+    title: 'AES-256-GCM 암호화',
+    description: '민감 데이터는 AES-256-GCM 인증 암호화로 저장합니다. 12바이트 랜덤 IV와 16바이트 Auth Tag를 적용하며, 키 버전 접두사를 통해 키 롤링을 지원합니다.',
+  },
+  {
+    icon: Smartphone,
+    title: 'TOTP MFA (다단계 인증)',
+    description: '관리자 계정에 시간 기반 일회용 패스워드(TOTP) 다단계 인증을 적용합니다. 30초 단위 갱신되는 6자리 코드로 비밀번호 단독 탈취 시에도 계정 접근을 차단합니다.',
   },
 ];
 

@@ -1390,9 +1390,21 @@ export const Chat: React.FC = () => {
     const currentModelPiWon = modelById.get(currentModelId)?.piWon ?? 1;
     
     let sessionIdForThisRequest = currentSessionId;
+    // 현재 세션에 메시지가 이미 있으면(환영 화면이 아닌 상황에서 "새 대화 없이" 보내는 경우가 아닌,
+    // 환영 화면이 실제로 기존 메시지가 있는 세션을 가리키는 경우는 없으므로
+    // 현재 세션이 없거나 빈 세션이 아니면 새 채팅 생성)
     if (!sessionIdForThisRequest) {
       const created = createChatSession('새 대화');
       sessionIdForThisRequest = created || useStore.getState().currentSessionId;
+    } else {
+      // 현재 세션에 메시지가 있으면 새 채팅을 만들어서 전송
+      const liveSession = useStore.getState().chatSessions.find((s: any) => s.id === sessionIdForThisRequest);
+      if (liveSession && liveSession.messages && liveSession.messages.length > 0) {
+        const newSessionId = createChatSession('새 대화');
+        if (newSessionId) {
+          sessionIdForThisRequest = newSessionId;
+        }
+      }
     }
 
     if (!sessionIdForThisRequest) {
