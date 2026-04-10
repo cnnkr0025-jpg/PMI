@@ -352,6 +352,36 @@ export interface BookmarkedMessage {
   sessionTitle?: string;
 }
 
+// 관리자 메시지 타입
+export interface AdminMessage {
+  id: string;
+  title: string;
+  content: string;
+  to_user_id: string | null; // null = 전체 공지
+  from_admin_email: string;
+  created_at: string;
+  is_read?: boolean;
+}
+
+// 사용자 문의 타입
+export type InquiryType = 'credit' | 'pmc' | 'model' | 'other';
+export type InquiryStatus = 'open' | 'resolved';
+
+export interface UserInquiry {
+  id: string;
+  user_id: string;
+  user_email: string;
+  user_name?: string;
+  type: InquiryType;
+  title: string;
+  content: string;
+  screenshots: string[]; // base64 data URLs
+  status: InquiryStatus;
+  admin_reply?: string;
+  replied_at?: string;
+  created_at: string;
+}
+
 // Poll (투표) 관련 타입
 export type PollStatus = 'active' | 'closed' | 'expired';
 

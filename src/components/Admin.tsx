@@ -18,7 +18,10 @@ import {
   X,
   Users,
   Edit2,
-  Check
+  Check,
+  Send,
+  MessageSquare,
+  Inbox
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { csrfFetch } from '@/lib/csrfFetch';
@@ -52,7 +55,7 @@ export const Admin: React.FC = () => {
   const [localPaymentFee, setLocalPaymentFee] = useState(paymentFeeMemo);
   const [adminPassword, setAdminPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [activeTab, setActiveTab] = useReactState<'settings' | 'inbox' | 'polls' | 'users' | 'database'>('settings');
+  const [activeTab, setActiveTab] = useReactState<'settings' | 'inbox' | 'polls' | 'users' | 'database' | 'messages' | 'inquiries'>('settings');
   const [users, setUsers] = useState<any[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
@@ -60,6 +63,17 @@ export const Admin: React.FC = () => {
   const [newPollTitle, setNewPollTitle] = useState('');
   const [newPollDescription, setNewPollDescription] = useState('');
   const [showPollForm, setShowPollForm] = useState(false);
+  // 메시지 발송
+  const [msgTitle, setMsgTitle] = useState('');
+  const [msgContent, setMsgContent] = useState('');
+  const [msgToUserId, setMsgToUserId] = useState('');
+  const [msgSending, setMsgSending] = useState(false);
+  // 문의함
+  const [inquiries, setInquiries] = useState<any[]>([]);
+  const [inquiriesLoading, setInquiriesLoading] = useState(false);
+  const [selectedInquiry, setSelectedInquiry] = useState<any | null>(null);
+  const [inquiryReply, setInquiryReply] = useState('');
+  const [replySubmitting, setReplySubmitting] = useState(false);
   const router = useRouter();
   const adminPathHeader = typeof window !== 'undefined' ? (() => {
     try {
@@ -175,6 +189,52 @@ export const Admin: React.FC = () => {
     }));
   };
   
+  const getAdminToken = () => {
+    try { return localStorage.getItem('adminToken') || 'admin-token'; } catch { return 'admin-token'; }
+  };
+
+  const sendMessage = async () => {
+    if (!msgTitle.trim() || !msgContent.trim()) { toast.error('제목과 내용을 입력하세요.'); return; }
+    setMsgSending(true);
+    try {
+      const res = await fetch('/api/admin/send-message', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAdminToken()}`, 'x-admin-path': adminPathHeader },
+        body: JSON.stringify({ title: msgTitle.trim(), content: msgContent.trim(), to_user_id: msgToUserId.trim() || null }),
+      });
+      if (!res.ok) { const d = await res.json(); toast.error(d.error || '발송 실패'); return; }
+      toast.success('메시지가 발송되었습니다.');
+      setMsgTitle(''); setMsgContent(''); setMsgToUserId('');
+    } catch { toast.error('네트워크 오류'); } finally { setMsgSending(false); }
+  };
+
+  const fetchInquiries = async () => {
+    setInquiriesLoading(true);
+    try {
+      const res = await fetch('/api/admin/inquiries', { headers: { 'Authorization': `Bearer ${getAdminToken()}`, 'x-admin-path': adminPathHeader } });
+      if (!res.ok) { toast.error('문의 목록 로드 실패'); return; }
+      const d = await res.json();
+      setInquiries(d.inquiries || []);
+    } catch { toast.error('네트워크 오류'); } finally { setInquiriesLoading(false); }
+  };
+
+  const submitReply = async (id: string) => {
+    if (!inquiryReply.trim()) { toast.error('답변을 입력하세요.'); return; }
+    setReplySubmitting(true);
+    try {
+      const res = await fetch('/api/admin/inquiries', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAdminToken()}`, 'x-admin-path': adminPathHeader },
+        body: JSON.stringify({ id, status: 'resolved', admin_reply: inquiryReply.trim() }),
+      });
+      if (!res.ok) { toast.error('답변 저장 실패'); return; }
+      toast.success('답변이 저장되었습니다.');
+      setInquiryReply('');
+      setSelectedInquiry(null);
+      fetchInquiries();
+    } catch { toast.error('네트워크 오류'); } finally { setReplySubmitting(false); }
+  };
+
   const handleSaveChanges = () => {
     // 모델 업데이트
     localModels.forEach(model => {
@@ -371,6 +431,20 @@ export const Admin: React.FC = () => {
             onClick={() => setActiveTab('database')}
           >
             데이터베이스 관리
+          </button>
+          <button
+            className={cn('px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-1', activeTab === 'messages' ? 'bg-primary-600 text-white' : 'hover:bg-gray-100')}
+            onClick={() => setActiveTab('messages')}
+          >
+            <MessageSquare className="w-4 h-4" />
+            메시지 발송
+          </button>
+          <button
+            className={cn('px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-1', activeTab === 'inquiries' ? 'bg-primary-600 text-white' : 'hover:bg-gray-100')}
+            onClick={() => { setActiveTab('inquiries'); fetchInquiries(); }}
+          >
+            <Inbox className="w-4 h-4" />
+            문의함
           </button>
         </div>
         
@@ -910,6 +984,154 @@ export const Admin: React.FC = () => {
               </CardContent>
             </Card>
           </div>
+        )}
+
+        {activeTab === 'messages' && (
+          <Card variant="bordered">
+            <CardHeader>
+              <h2 className="text-xl font-semibold flex items-center gap-2">
+                <MessageSquare className="w-5 h-5" />
+                사용자에게 메시지 발송
+              </h2>
+              <p className="text-sm text-gray-500 mt-1">특정 사용자 ID를 입력하면 해당 사용자에게만, 비워두면 전체 공지로 발송됩니다.</p>
+            </CardHeader>
+            <CardContent className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">수신자 User ID (선택 — 비워두면 전체 공지)</label>
+                <input
+                  type="text"
+                  value={msgToUserId}
+                  onChange={(e) => setMsgToUserId(e.target.value)}
+                  placeholder="특정 사용자 ID (예: uuid)"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">제목</label>
+                <input
+                  type="text"
+                  value={msgTitle}
+                  onChange={(e) => setMsgTitle(e.target.value)}
+                  maxLength={200}
+                  placeholder="메시지 제목"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">내용</label>
+                <textarea
+                  value={msgContent}
+                  onChange={(e) => setMsgContent(e.target.value)}
+                  maxLength={3000}
+                  rows={6}
+                  placeholder="메시지 내용을 입력하세요"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+                <p className="text-xs text-gray-400 text-right mt-1">{msgContent.length}/3000</p>
+              </div>
+              <Button variant="primary" onClick={sendMessage} disabled={msgSending}>
+                <Send className="w-4 h-4 mr-2" />
+                {msgSending ? '발송 중...' : (msgToUserId.trim() ? '개인 메시지 발송' : '전체 공지 발송')}
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {activeTab === 'inquiries' && (
+          <Card variant="bordered">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-semibold flex items-center gap-2">
+                  <Inbox className="w-5 h-5" />
+                  사용자 문의함
+                </h2>
+                <Button variant="primary" size="sm" onClick={fetchInquiries} disabled={inquiriesLoading}>
+                  {inquiriesLoading ? '로딩 중...' : '새로고침'}
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="p-6">
+              {selectedInquiry ? (
+                <div className="space-y-4">
+                  <button onClick={() => { setSelectedInquiry(null); setInquiryReply(''); }} className="text-sm text-gray-500 hover:text-gray-900 flex items-center gap-1">
+                    ← 목록으로
+                  </button>
+                  <div className="border rounded-lg p-4 space-y-3">
+                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                      <span className={cn('px-2 py-0.5 rounded text-xs font-semibold', selectedInquiry.type === 'credit' ? 'bg-yellow-100 text-yellow-700' : selectedInquiry.type === 'pmc' ? 'bg-purple-100 text-purple-700' : selectedInquiry.type === 'model' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700')}>
+                        {selectedInquiry.type === 'credit' ? '크레딧' : selectedInquiry.type === 'pmc' ? 'PMC' : selectedInquiry.type === 'model' ? '모델' : '기타'}
+                      </span>
+                      <span>{new Date(selectedInquiry.created_at).toLocaleString()}</span>
+                      <span>• {selectedInquiry.user_email}</span>
+                      {selectedInquiry.user_name && <span>({selectedInquiry.user_name})</span>}
+                    </div>
+                    <h3 className="text-base font-semibold">{selectedInquiry.title}</h3>
+                    <p className="text-sm whitespace-pre-wrap text-gray-700">{selectedInquiry.content}</p>
+                    {selectedInquiry.screenshots?.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {selectedInquiry.screenshots.map((src: string, i: number) => (
+                          <a key={i} href={src} target="_blank" rel="noreferrer" className="block w-24 h-24 border rounded overflow-hidden">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={src} alt={`s-${i}`} className="w-full h-full object-cover" />
+                          </a>
+                        ))}
+                      </div>
+                    )}
+                    {selectedInquiry.admin_reply && (
+                      <div className="mt-3 p-3 bg-gray-50 border rounded-lg">
+                        <p className="text-xs font-semibold text-gray-500 mb-1">관리자 답변</p>
+                        <p className="text-sm text-gray-700 whitespace-pre-wrap">{selectedInquiry.admin_reply}</p>
+                      </div>
+                    )}
+                  </div>
+                  {selectedInquiry.status === 'open' && (
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-gray-700">답변 작성</label>
+                      <textarea
+                        value={inquiryReply}
+                        onChange={(e) => setInquiryReply(e.target.value)}
+                        rows={4}
+                        placeholder="사용자에게 보낼 답변..."
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      />
+                      <Button variant="primary" size="sm" onClick={() => submitReply(selectedInquiry.id)} disabled={replySubmitting}>
+                        {replySubmitting ? '저장 중...' : '답변 저장 및 처리완료'}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              ) : inquiriesLoading ? (
+                <div className="text-center py-12 text-gray-500">로딩 중...</div>
+              ) : inquiries.length === 0 ? (
+                <div className="text-center py-12 text-gray-500">접수된 문의가 없습니다.</div>
+              ) : (
+                <div className="space-y-2">
+                  {inquiries.map((item) => (
+                    <button
+                      key={item.id}
+                      onClick={() => { setSelectedInquiry(item); setInquiryReply(item.admin_reply || ''); }}
+                      className="w-full text-left border rounded-lg p-4 hover:bg-gray-50 transition-colors"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className={cn('flex-shrink-0 text-xs px-2 py-0.5 rounded font-semibold', item.status === 'open' ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700')}>
+                            {item.status === 'open' ? '미처리' : '처리완료'}
+                          </span>
+                          <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">
+                            {item.type === 'credit' ? '크레딧' : item.type === 'pmc' ? 'PMC' : item.type === 'model' ? '모델' : '기타'}
+                          </span>
+                          <span className="text-sm font-medium truncate">{item.title}</span>
+                        </div>
+                        <div className="flex-shrink-0 text-xs text-gray-400">
+                          {item.user_email} · {new Date(item.created_at).toLocaleDateString()}
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         )}
 
         {activeTab === 'database' && (

@@ -2070,6 +2070,7 @@ export const useStore = create<AppState>()(
           sendButtonSound: state.sendButtonSound,
           settings: state.settings,
           language: state.language,
+          speechLevel: state.speechLevel,
         };
       },
       // 데이터 복원 시 사용자별 데이터 로드
@@ -2092,6 +2093,7 @@ export const useStore = create<AppState>()(
               // 전역 데이터 복원
               state.customDesignTheme = persistedState.customDesignTheme || { theme: null, elementColors: {} };
               state.settings = persistedState.settings || { showDeleteConfirmation: true, showSuccessNotifications: true };
+              state.speechLevel = persistedState.speechLevel || 'formal';
               
               // 사용자별 데이터 복원
               state.selections = persistedState[`user_${userId}_selections`] || [];

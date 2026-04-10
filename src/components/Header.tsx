@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { User as UserIcon, LogOut, Vote, Globe, Info } from 'lucide-react';
+import { User as UserIcon, LogOut, Vote, Globe, Info, ShieldCheck, MessageSquare } from 'lucide-react';
 import { useStore } from '@/store';
 import { Button } from './ui/Button';
 import { LogoMark } from './LogoMark';
@@ -28,6 +28,7 @@ export const Header = React.memo(() => {
   const [isPollModalOpen, setIsPollModalOpen] = useState(false);
   const [isLanguageMenuOpen, setIsLanguageMenuOpen] = useState(false);
   const [isPMCInfoOpen, setIsPMCInfoOpen] = useState(false);
+  const [unreadMessageCount, setUnreadMessageCount] = useState(0);
   const languageMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -73,6 +74,24 @@ export const Header = React.memo(() => {
   }, [activePolls, currentUser]);
 
   const shouldHideHeader = useMemo(() => pathname === '/' || pathname === '/login', [pathname]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    let cancelled = false;
+    const fetchUnread = async () => {
+      try {
+        const res = await fetch('/api/messages?count=true', { credentials: 'include' });
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        if (!cancelled) setUnreadMessageCount(data.unreadCount ?? 0);
+      } catch {
+        // 네트워크 오류 무시
+      }
+    };
+    fetchUnread();
+    const interval = setInterval(fetchUnread, 60_000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [isAuthenticated]);
 
   const handleLogout = useCallback(() => {
     logout();
@@ -155,6 +174,17 @@ export const Header = React.memo(() => {
                 <button type="button" onClick={() => setIsPMCInfoOpen(true)} className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" title="PMC 정보">
                   <Info className="w-5 h-5 text-gray-700 dark:text-gray-300" />
                 </button>
+                <Link href="/security" className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" title="보안 정책">
+                  <ShieldCheck className="w-5 h-5 text-gray-700 dark:text-gray-300" />
+                </Link>
+                <Link href="/messages" className="relative p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" title="메시지">
+                  <MessageSquare className="w-5 h-5 text-gray-700 dark:text-gray-300" />
+                  {unreadMessageCount > 0 && (
+                    <span className="absolute -top-0.5 -left-0.5 min-w-[16px] h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-0.5">
+                      {unreadMessageCount > 99 ? '99+' : unreadMessageCount}
+                    </span>
+                  )}
+                </Link>
                 <div className="relative" ref={languageMenuRef}>
                   <button type="button" onClick={() => setIsLanguageMenuOpen((prev) => !prev)} className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" title={ui.language}>
                     <Globe className="w-5 h-5 text-gray-700 dark:text-gray-300" />

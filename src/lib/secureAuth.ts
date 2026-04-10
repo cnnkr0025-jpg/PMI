@@ -14,7 +14,7 @@ type JWTKey = Awaited<ReturnType<typeof importPKCS8>>;
  */
 
 // ── 상수 ──
-const ACCESS_TOKEN_EXPIRY = '15m';
+const ACCESS_TOKEN_EXPIRY = '30d';
 const REFRESH_TOKEN_EXPIRY = '7d';
 const MAX_SESSIONS_PER_USER = 5;
 
