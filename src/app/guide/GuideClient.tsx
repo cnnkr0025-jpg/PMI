@@ -14,7 +14,7 @@ const SERIES_LABELS: Record<string, string> = {
   coding: '코딩 특화',
 };
 
-export default function GuidePage() {
+export default function GuidePage({ hidePromoBanner }: { hidePromoBanner?: boolean }) {
   const groups = useMemo(() => {
     const map = new Map<string, typeof initialModels>();
     for (const m of initialModels) {
