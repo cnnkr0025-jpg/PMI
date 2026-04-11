@@ -57,9 +57,7 @@ export function SessionInitializer() {
         if (data.authenticated && data.user) {
           const userId = data.user.id;
 
-          // ★ 핵심: setCurrentUser 호출 전에 localStorage에서 기존 크레딧을 읽어둠
-          // setCurrentUser가 partialize를 트리거하여 wallet:null을 저장하면 기존 데이터가 소멸하기 때문
-          let savedLocalCredits: Record<string, number> = {};
+          // 로컬 트랜잭션 내역(UI 표시용)만 읽어둠 - 크레딧은 서버를 진실값으로 사용
           let savedLocalTransactions: any[] = [];
           let savedLocalHasFirstPurchase = false;
           try {
@@ -69,26 +67,14 @@ export function SessionInitializer() {
               const ps = parsed?.state;
               if (ps) {
                 const userWallet = ps[`user_${userId}_wallet`];
-                if (userWallet?.credits && Object.keys(userWallet.credits).length > 0) {
-                  savedLocalCredits = { ...userWallet.credits };
-                  savedLocalTransactions = userWallet.transactions || [];
-                }
-                if (Object.keys(savedLocalCredits).length === 0 && ps.wallet?.credits && Object.keys(ps.wallet.credits).length > 0) {
-                  savedLocalCredits = { ...ps.wallet.credits };
-                  savedLocalTransactions = ps.wallet?.transactions || [];
-                }
+                if (userWallet?.transactions) savedLocalTransactions = userWallet.transactions;
                 const userHfp = ps[`user_${userId}_hasFirstPurchase`];
                 if (userHfp) savedLocalHasFirstPurchase = true;
               }
             }
           } catch { /* ignore */ }
 
-          // setCurrentUser + wallet을 한 번에 설정하여 partialize가 빈 wallet을 저장하는 것을 방지
-          const initialWallet = {
-            userId,
-            credits: savedLocalCredits,
-            transactions: savedLocalTransactions,
-          };
+          // 서버 데이터 로드 전 임시 상태 (크레딧은 비워둠 - 서버에서 받을 때까지)
           useStore.setState({
             currentUser: {
               id: userId,
@@ -100,8 +86,8 @@ export function SessionInitializer() {
               createdAt: new Date(),
             },
             isAuthenticated: true,
-            wallet: initialWallet,
-            hasFirstPurchase: savedLocalHasFirstPurchase || Object.keys(savedLocalCredits).length > 0,
+            wallet: { userId, credits: {}, transactions: savedLocalTransactions },
+            hasFirstPurchase: savedLocalHasFirstPurchase,
           });
 
           // 서버 데이터(지갑/설정) + 채팅 세션을 병렬로 로드
@@ -140,59 +126,17 @@ export function SessionInitializer() {
             if (userData) {
               const stateUpdate: Record<string, any> = {};
 
+              // 서버 크레딧만 신뢰 (로컬값과 병합하지 않음)
               const serverCredits = userData.credits || {};
-              
-              // 병합: 서버와 로컬 중 더 큰 값을 사용
-              const mergedCredits: Record<string, number> = { ...savedLocalCredits };
-              for (const [modelId, amount] of Object.entries(serverCredits)) {
-                const serverVal = typeof amount === 'number' ? amount : 0;
-                const localVal = mergedCredits[modelId] || 0;
-                mergedCredits[modelId] = Math.max(serverVal, localVal);
-              }
-              
-              // 0 이하인 크레딧 제거
-              for (const key of Object.keys(mergedCredits)) {
-                if (mergedCredits[key] <= 0) delete mergedCredits[key];
-              }
-              
-              let hasCredits = Object.keys(mergedCredits).length > 0;
-              
-              // 신규 사용자 무료 크레딧 지급 (gpt5 10회, haiku45 10회, sonar 10회)
-              if (!hasCredits && !savedLocalHasFirstPurchase && !userData.settings?.hasFirstPurchase) {
-                mergedCredits['gpt5'] = 10;
-                mergedCredits['haiku45'] = 10;
-                mergedCredits['sonar'] = 10;
-                hasCredits = true;
-                stateUpdate.hasFirstPurchase = true;
-                
-                // 서버에 무료 크레딧 저장
-                fetch('/api/wallet', {
-                  method: 'PATCH',
-                  credentials: 'include',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ credits: mergedCredits }),
-                }).catch(() => {});
-              }
-              
+              const hasCredits = Object.keys(serverCredits).length > 0;
+
               stateUpdate.wallet = {
                 userId,
-                credits: mergedCredits,
+                credits: serverCredits,
                 transactions: savedLocalTransactions,
               };
-              if (hasCredits) {
+              if (hasCredits || userData.settings?.hasFirstPurchase) {
                 stateUpdate.hasFirstPurchase = true;
-              }
-              
-              // 병합된 크레딧이 서버와 다르면 서버에도 동기화
-              const serverStr = JSON.stringify(serverCredits);
-              const mergedStr = JSON.stringify(mergedCredits);
-              if (hasCredits && serverStr !== mergedStr) {
-                fetch('/api/wallet', {
-                  method: 'PATCH',
-                  credentials: 'include',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ credits: mergedCredits }),
-                }).catch(() => {});
               }
 
               // 설정 복원

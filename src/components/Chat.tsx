@@ -818,6 +818,13 @@ export const Chat: React.FC = () => {
     return Math.min(credits, 50);
   }, [isVideoModel, selectedModelId, walletCredits]);
 
+  // 모델 변경 또는 크레딧 변경 시 videoSeconds를 보유량 이내로 클램핑
+  useEffect(() => {
+    if (isVideoModel && videoMaxSeconds > 0) {
+      setVideoSeconds(prev => Math.min(prev, videoMaxSeconds));
+    }
+  }, [isVideoModel, videoMaxSeconds]);
+
   const availableModels = useMemo(
     () => models.filter(m => {
       const credits = walletCredits?.[m.id] || 0;
@@ -2942,7 +2949,7 @@ export const Chat: React.FC = () => {
                         const v = Math.max(1, Math.min(videoMaxSeconds, Number(e.target.value)));
                         setVideoSeconds(v);
                       }}
-                      className="w-12 text-center px-1 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-primary"
+                      className="w-14 text-center px-1 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-primary"
                       disabled={isLoading || streamingRef.current}
                     />
                     <span className="text-[10px] text-gray-400 leading-none">초</span>

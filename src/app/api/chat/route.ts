@@ -48,7 +48,6 @@ const PERPLEXITY_MODEL_IDS = new Set(['sonar', 'sonarPro', 'deepResearch']);
 const IMAGE_MODEL_IDS = new Set(['gptimage1', 'dalle3']);
 const GROK_TEXT_IDS = new Set(['grok3mini', 'grok3', 'grok4fastNR', 'grok4fastR', 'grok41fastNR', 'grok41fastR', 'grok40709', 'grokCodeFast1']);
 const GROK_IMAGE_IDS = new Set(['grokImagine', 'grok2image']);
-const SORA_VIDEO_IDS = new Set(['sora2_720p', 'sora2pro_720p', 'sora2pro_1024p']);
 const GROK_VIDEO_IDS = new Set(['grokImagineVideo']);
 
 function getServerDb() {
@@ -115,6 +114,61 @@ async function refundChatCredit(userId: string, modelId: string): Promise<void> 
     type: 'purchase',
     credits: { [modelId]: 1 },
     description: 'AI 오류 보상 환불',
+  });
+}
+
+// 영상 모델: 잔액 확인 후 seconds만큼 차감 (서버에서 초 단위 검증)
+async function consumeVideoCredits(userId: string, modelId: string, seconds: number): Promise<boolean> {
+  const db = getServerDb();
+  const walletResult = await db.from('user_wallets').select('credits').eq('user_id', userId).single();
+  const credits = (walletResult.data?.credits as Record<string, number> | null) || {};
+  const available = Number(credits[modelId] || 0);
+
+  if (!Number.isFinite(available) || available < seconds) {
+    return false;
+  }
+
+  const nextCredits = { ...credits, [modelId]: available - seconds };
+  if (nextCredits[modelId] <= 0) delete nextCredits[modelId];
+
+  const updateResult = await db
+    .from('user_wallets')
+    .update({ credits: nextCredits, updated_at: new Date().toISOString() })
+    .eq('user_id', userId)
+    .select('user_id')
+    .limit(1);
+
+  if (updateResult.error) {
+    throw new Error('[ERR_CREDIT_01] Failed to consume video credit.');
+  }
+
+  await db.from('transactions').insert({
+    user_id: userId,
+    type: 'usage',
+    model_id: modelId,
+    credits: { [modelId]: -seconds },
+    description: `영상 생성 사용 (${seconds}초)`,
+  });
+
+  return true;
+}
+
+async function refundVideoCredits(userId: string, modelId: string, seconds: number): Promise<void> {
+  const db = getServerDb();
+  const walletResult = await db.from('user_wallets').select('credits').eq('user_id', userId).single();
+  const credits = (walletResult.data?.credits as Record<string, number> | null) || {};
+  const nextCredits = { ...credits, [modelId]: (Number(credits[modelId] || 0) || 0) + seconds };
+
+  await db
+    .from('user_wallets')
+    .update({ credits: nextCredits, updated_at: new Date().toISOString() })
+    .eq('user_id', userId);
+
+  await db.from('transactions').insert({
+    user_id: userId,
+    type: 'purchase',
+    credits: { [modelId]: seconds },
+    description: `영상 생성 오류 환불 (${seconds}초)`,
   });
 }
 
@@ -930,52 +984,6 @@ async function callPerplexity(model: string, messages: any[], userAttachments?: 
   return content;
 }
 
-// OpenAI Sora 영상 생성 API 호출
-async function callSoraVideo(modelId: string, prompt: string, durationSeconds: number): Promise<string> {
-  const apiKey = apiKeyManager.getAvailableKey('openai');
-  if (!apiKey) throw new Error('[ERR_KEY_01] OpenAI API key not configured.');
-
-  const modelMap: Record<string, string> = {
-    'sora2_720p':     'sora-2',
-    'sora2pro_720p':  'sora-2-pro',
-    'sora2pro_1024p': 'sora-2-pro',
-  };
-  const resolution = modelId === 'sora2pro_1024p' ? '1024x576' : '1280x720';
-  const soraModel = modelMap[modelId] || 'sora-2';
-
-  const response = await fetchWithRetry('https://api.openai.com/v1/video/generations', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: soraModel,
-      prompt,
-      n: 1,
-      duration: durationSeconds,
-      resolution,
-    }),
-  }, {
-    timeout: Math.max(DEFAULT_API_TIMEOUT_MS, 120000), // 영상은 최소 2분
-    maxRetries: 0,
-    retryDelay: DEFAULT_RETRY_DELAY_MS,
-  });
-
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error(`[ERR_SORA_${response.status}] Sora error: ${JSON.stringify(err)}`);
-  }
-
-  const data = await response.json();
-  // Sora API: data.data[0].url 또는 data.data[0].b64_json
-  const url = data?.data?.[0]?.url;
-  const b64 = data?.data?.[0]?.b64_json;
-  if (url) return `__VIDEO__:${url}`;
-  if (b64) return `__VIDEO__:data:video/mp4;base64,${b64}`;
-  throw new Error('[ERR_EMPTY_SORA] Sora empty response');
-}
-
 // xAI Grok 영상 생성 API 호출
 async function callGrokVideo(prompt: string, durationSeconds: number): Promise<string> {
   const apiKey = apiKeyManager.getAvailableKey('xai');
@@ -1164,6 +1172,7 @@ export async function POST(request: NextRequest) {
   }
 
   let chargedModelId = '';
+  let chargedVideoSeconds = 0;
   try {
     // Rate Limiting 체크
     const clientIp = getClientIp(request);
@@ -1405,6 +1414,21 @@ Example style:
       }
     }
 
+    // 영상 모델: 보유 초 검증 후 초 단위 차감 (일반 모델보다 먼저 처리)
+    if (GROK_VIDEO_IDS.has(modelId)) {
+      const duration = Math.max(1, Math.min(50, Number(videoSeconds) || 5));
+      const videoConsumed = await consumeVideoCredits(session.userId, modelId, duration);
+      if (!videoConsumed) {
+        return NextResponse.json({ error: 'ERR_CREDIT_00', reason: '영상 생성 크레딧(초)이 부족합니다.' }, { status: 402 });
+      }
+      chargedModelId = modelId;
+      chargedVideoSeconds = duration;
+      const userMsg = findLastMessageByRole(messages, 'user');
+      const prompt = typeof userMsg?.content === 'string' ? userMsg.content : (userMsg?.content?.[0]?.text || '');
+      const videoResult = await callGrokVideo(prompt, duration);
+      return NextResponse.json({ content: videoResult });
+    }
+
     const creditConsumed = await consumeChatCredit(session.userId, modelId);
     if (!creditConsumed) {
       return NextResponse.json({ error: 'ERR_CREDIT_00', reason: '사용 가능한 크레딧이 없습니다.' }, { status: 402 });
@@ -1418,20 +1442,6 @@ Example style:
 
     // 모델 제공사 판별
     const isGrokModel = GROK_TEXT_IDS.has(modelId) || GROK_IMAGE_IDS.has(modelId) || GROK_VIDEO_IDS.has(modelId);
-
-    // 영상 모델 먼저 처리
-    if (SORA_VIDEO_IDS.has(modelId) || GROK_VIDEO_IDS.has(modelId)) {
-      const userMsg = findLastMessageByRole(messages, 'user');
-      const prompt = typeof userMsg?.content === 'string' ? userMsg.content : (userMsg?.content?.[0]?.text || '');
-      const duration = Math.max(1, Math.min(50, Number(videoSeconds) || 5));
-      let videoResult: string;
-      if (SORA_VIDEO_IDS.has(modelId)) {
-        videoResult = await callSoraVideo(modelId, prompt, duration);
-      } else {
-        videoResult = await callGrokVideo(prompt, duration);
-      }
-      return NextResponse.json({ content: videoResult });
-    }
 
     const isOpenAIModel = !isGrokModel && (
       modelId.startsWith('gpt')
@@ -1506,7 +1516,11 @@ Example style:
   } catch (error: any) {
     if (session.userId && chargedModelId) {
       try {
-        await refundChatCredit(session.userId, chargedModelId);
+        if (chargedVideoSeconds > 0) {
+          await refundVideoCredits(session.userId, chargedModelId, chargedVideoSeconds);
+        } else {
+          await refundChatCredit(session.userId, chargedModelId);
+        }
       } catch {}
     }
     // 모든 환경에서 에러 로깅 (디버깅용)
@@ -1554,7 +1568,7 @@ function normalizeRouteErrorCode(rawCode: string | undefined, message: string, s
   }
 
   if (rawCode) {
-    const providerStatusMatch = rawCode.match(/^ERR_(?:SORA|GROK_VID|XAI(?:_IMG)?)_(\d{3})$/);
+    const providerStatusMatch = rawCode.match(/^ERR_(?:GROK_VID|XAI(?:_IMG)?)_(\d{3})$/);
     if (providerStatusMatch) {
       const providerStatus = Number(providerStatusMatch[1]);
       if (providerStatus === 401 || providerStatus === 403) return 'ERR_AUTH';
@@ -1563,7 +1577,7 @@ function normalizeRouteErrorCode(rawCode: string | undefined, message: string, s
       return 'ERR_RESP_05';
     }
 
-    if (rawCode === 'ERR_EMPTY_SORA' || rawCode === 'ERR_EMPTY_GROK_VID') {
+    if (rawCode === 'ERR_EMPTY_GROK_VID') {
       return 'ERR_EMPTY_05';
     }
 

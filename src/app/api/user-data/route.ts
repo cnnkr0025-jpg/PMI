@@ -44,27 +44,48 @@ export async function GET(request: NextRequest) {
     const db = getSupabaseAdmin();
 
     // 지갑 로드
-    let credits = {};
+    let credits: Record<string, number> = {};
     try {
       const walletResult = await db.from('user_wallets').select('credits').eq('user_id', userId).single();
       if (walletResult.error?.code === 'PGRST116') {
         await db.from('user_wallets').insert({ user_id: userId, credits: {} });
       } else if (walletResult.data) {
-        credits = walletResult.data.credits || {};
+        credits = (walletResult.data.credits as Record<string, number>) || {};
       }
     } catch {
       // 지갑 테이블 접근 실패 시 무시
     }
 
     // 설정 로드 (테이블이 없을 수 있음)
-    let settings = null;
+    let settings: Record<string, any> | null = null;
     try {
       const settingsResult = await db.from('user_settings').select('data').eq('user_id', userId).single();
       if (settingsResult.data) {
-        settings = settingsResult.data.data || null;
+        settings = (settingsResult.data.data as Record<string, any>) || null;
       }
     } catch {
       // user_settings 테이블이 없으면 무시
+    }
+
+    // 신규 사용자 무료 크레딧 자동 지급 (서버에서만 처리)
+    if (Object.keys(credits).length === 0 && !settings?.hasFirstPurchase) {
+      const freeCredits: Record<string, number> = { gpt5: 10, haiku45: 10, sonar: 10 };
+      try {
+        await db.from('user_wallets').upsert(
+          { user_id: userId, credits: freeCredits, updated_at: new Date().toISOString() },
+          { onConflict: 'user_id' }
+        );
+        credits = freeCredits;
+
+        const newSettings = { ...(settings || {}), hasFirstPurchase: true };
+        await db.from('user_settings').upsert(
+          { user_id: userId, data: newSettings, updated_at: new Date().toISOString() },
+          { onConflict: 'user_id' }
+        );
+        settings = newSettings;
+      } catch {
+        // 자동 지급 실패 시 무시
+      }
     }
 
     return NextResponse.json({
@@ -100,13 +121,30 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const db = getSupabaseAdmin();
 
-    // settings 데이터 저장 (upsert)
+    // settings 데이터 저장 (upsert) - 민감 필드는 서버에서만 관리
     if (body.settings !== undefined) {
       try {
+        // pmcBalance·userPlan은 클라이언트 조작 방지를 위해 저장 제외
+        // (pmcBalance는 결제 confirm에서만, userPlan은 관리자 경로에서만 변경)
+        const { pmcBalance: _pm, userPlan: _up, ...safeSettings } = body.settings as Record<string, any>;
+
+        // 기존 DB의 pmcBalance·userPlan은 보존
+        let existingProtected: Record<string, any> = {};
+        try {
+          const existing = await db.from('user_settings').select('data').eq('user_id', userId).single();
+          if (existing.data?.data) {
+            const d = existing.data.data as Record<string, any>;
+            if (d.pmcBalance !== undefined) existingProtected.pmcBalance = d.pmcBalance;
+            if (d.userPlan !== undefined) existingProtected.userPlan = d.userPlan;
+          }
+        } catch { /* ignore */ }
+
+        const mergedSettings = { ...safeSettings, ...existingProtected };
+
         const { error } = await db
           .from('user_settings')
           .upsert(
-            { user_id: userId, data: body.settings, updated_at: new Date().toISOString() },
+            { user_id: userId, data: mergedSettings, updated_at: new Date().toISOString() },
             { onConflict: 'user_id' }
           );
 

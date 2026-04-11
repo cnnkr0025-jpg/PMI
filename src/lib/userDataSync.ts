@@ -70,8 +70,8 @@ export function extractSettingsFromState(state: any): Record<string, any> {
     aiGrowthData: state.aiGrowthData || null,
     expertiseProfiles: state.expertiseProfiles || [],
     activeExpertise: state.activeExpertise || null,
-    pmcBalance: state.pmcBalance || { amount: 0, history: [] },
-    userPlan: state.userPlan || 'free',
+    // pmcBalance·userPlan은 서버에서만 관리 (클라이언트 조작 방지)
+    // pmcBalance는 결제 confirm 서버에서만, userPlan은 관리자 경로에서만 변경
     storedFacts: state.storedFacts || [],
     usageAlerts: state.usageAlerts || [],
     notifications: state.notifications || [],
