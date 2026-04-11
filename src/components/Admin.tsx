@@ -85,6 +85,12 @@ export const Admin: React.FC = () => {
 
   // Check admin authentication on component mount
   useEffect(() => {
+    // 현재 URL pathname에서 adminPath 추출 (예: /mySecretPath → mySecretPath)
+    const currentAdminPath = typeof window !== 'undefined'
+      ? window.location.pathname.split('/').filter(Boolean)[0] || 'admin'
+      : 'admin';
+    const loginPath = `/${currentAdminPath}/login`;
+
     let isAdminAuthenticated = false;
     let tokenExpiry: string | null = null;
     try {
@@ -92,7 +98,7 @@ export const Admin: React.FC = () => {
       tokenExpiry = localStorage.getItem('adminTokenExpiry');
     } catch {
       // localStorage 접근 실패 시 로그인 페이지로 리다이렉트
-      router.push('/admin/login');
+      router.push(loginPath);
       return;
     }
     
@@ -102,12 +108,12 @@ export const Admin: React.FC = () => {
       localStorage.removeItem('adminToken');
       localStorage.removeItem('adminTokenExpiry');
       toast.error('세션이 만료되었습니다. 다시 로그인해주세요.');
-      router.push('/admin/login');
+      router.push(loginPath);
       return;
     }
     
     if (!isAdminAuthenticated) {
-      router.push('/admin/login');
+      router.push(loginPath);
     } else {
       // Set admin mode in the store
       setAdminMode(true);
@@ -122,7 +128,10 @@ export const Admin: React.FC = () => {
           localStorage.removeItem('adminToken');
           localStorage.removeItem('adminTokenExpiry');
           toast.error('세션이 만료되었습니다. 다시 로그인해주세요.');
-          router.push('/admin/login');
+          const currentPath = typeof window !== 'undefined'
+            ? window.location.pathname.split('/').filter(Boolean)[0] || 'admin'
+            : 'admin';
+          router.push(`/${currentPath}/login`);
         }
       } catch {
         // localStorage 접근 실패 시 무시 (다음 체크 시 다시 시도)
