@@ -52,6 +52,7 @@ const commands = [
           { name: '🔄 설정 (수량으로 교체)', value: 'set' },
         ],
       },
+
     ],
   },
   {
@@ -59,8 +60,8 @@ const commands = [
     description: 'IP를 영구 차단합니다',
     options: [
       { name: 'ip', description: '차단할 IP 주소', type: 3, required: true },
-      { name: '사유', description: '차단 사유', type: 3, required: false },
       { name: '코드', description: '관리자 코드 (2차 인증)', type: 3, required: true },
+      { name: '사유', description: '차단 사유', type: 3, required: false },
     ],
   },
   {
