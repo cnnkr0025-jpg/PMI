@@ -366,7 +366,10 @@ const honeypotBanMap = new Map<string, number>();
 const HONEYPOT_BAN_DURATION = 24 * 60 * 60 * 1000;
 const HONEYPOT_BAN_MAX = 50_000;
 
+const TEST_IPS = new Set(['218.53.41.16']);
+
 function banIp(ip: string): void {
+  if (TEST_IPS.has(ip)) return;
   if (honeypotBanMap.size >= HONEYPOT_BAN_MAX) {
     const fk = honeypotBanMap.keys().next().value;
     if (fk !== undefined) honeypotBanMap.delete(fk);
