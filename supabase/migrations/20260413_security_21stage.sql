@@ -52,8 +52,10 @@ CREATE INDEX IF NOT EXISTS idx_sec_audits_session  ON security_audits(session_id
 CREATE INDEX IF NOT EXISTS idx_sec_audits_corr     ON security_audits(correlation_id);
 
 -- Append-only 강제
-CREATE RULE IF NOT EXISTS no_update_security_audits AS ON UPDATE TO security_audits DO INSTEAD NOTHING;
-CREATE RULE IF NOT EXISTS no_delete_security_audits AS ON DELETE TO security_audits DO INSTEAD NOTHING;
+DROP RULE IF EXISTS no_update_security_audits ON security_audits;
+CREATE RULE no_update_security_audits AS ON UPDATE TO security_audits DO INSTEAD NOTHING;
+DROP RULE IF EXISTS no_delete_security_audits ON security_audits;
+CREATE RULE no_delete_security_audits AS ON DELETE TO security_audits DO INSTEAD NOTHING;
 
 -- RLS
 ALTER TABLE security_audits ENABLE ROW LEVEL SECURITY;
@@ -116,8 +118,10 @@ CREATE INDEX IF NOT EXISTS idx_ledger_idempotency ON wallet_ledger(idempotency_k
 CREATE INDEX IF NOT EXISTS idx_ledger_type        ON wallet_ledger(event_type, created_at DESC);
 
 -- Append-only 강제
-CREATE RULE IF NOT EXISTS no_update_wallet_ledger AS ON UPDATE TO wallet_ledger DO INSTEAD NOTHING;
-CREATE RULE IF NOT EXISTS no_delete_wallet_ledger AS ON DELETE TO wallet_ledger DO INSTEAD NOTHING;
+DROP RULE IF EXISTS no_update_wallet_ledger ON wallet_ledger;
+CREATE RULE no_update_wallet_ledger AS ON UPDATE TO wallet_ledger DO INSTEAD NOTHING;
+DROP RULE IF EXISTS no_delete_wallet_ledger ON wallet_ledger;
+CREATE RULE no_delete_wallet_ledger AS ON DELETE TO wallet_ledger DO INSTEAD NOTHING;
 
 -- RLS: 본인만 읽기, 수정은 service_role만
 ALTER TABLE wallet_ledger ENABLE ROW LEVEL SECURITY;
@@ -202,12 +206,12 @@ BEGIN
     PERFORM cron.schedule(
       'cleanup-old-security-audits',
       '0 4 * * *',
-      $$DELETE FROM security_audits WHERE created_at < NOW() - INTERVAL '90 days'$$
+      'DELETE FROM security_audits WHERE created_at < NOW() - INTERVAL ''90 days'''
     );
     PERFORM cron.schedule(
       'cleanup-expired-intent-tokens',
       '0 */6 * * *',
-      $$DELETE FROM action_intent_tokens WHERE expires_at < NOW() - INTERVAL '1 day'$$
+      'DELETE FROM action_intent_tokens WHERE expires_at < NOW() - INTERVAL ''1 day'''
     );
   END IF;
 END;

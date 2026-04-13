@@ -21,10 +21,16 @@ function getSupabaseAdmin() {
 
 /**
  * 현재 잔액 조회 (최신 ledger entry의 balance_after 기준)
+ *
+ * 마이그레이션 과도기 fallback: wallet_ledger에 데이터가 없으면
+ * legacy user_wallets.credits(JSONB)의 합계를 반환.
+ * TODO: 마이그레이션 완료 후 fallback 제거.
  */
 export async function getBalance(userId: string): Promise<number> {
   const db = getSupabaseAdmin();
-  const { data, error } = await db
+
+  // 1. ledger 잔액 조회
+  const { data: ledgerData, error: ledgerError } = await db
     .from('wallet_ledger')
     .select('balance_after')
     .eq('user_id', userId)
@@ -32,8 +38,29 @@ export async function getBalance(userId: string): Promise<number> {
     .limit(1)
     .single();
 
-  if (error || !data) return 0;
-  return data.balance_after;
+  if (!ledgerError && ledgerData) {
+    console.log('[ledger] balance from ledger:', userId, ledgerData.balance_after);
+    return ledgerData.balance_after;
+  }
+
+  console.log('[ledger] ledger not found, falling back to user_wallets:', userId, ledgerError?.message);
+
+  // 2. 마이그레이션 미완료 fallback: user_wallets.credits(JSONB) 합계
+  const { data: legacyData, error: legacyError } = await db
+    .from('user_wallets')
+    .select('credits')
+    .eq('user_id', userId)
+    .single();
+
+  if (legacyData?.credits) {
+    const credits = legacyData.credits as Record<string, number>;
+    const total = Object.values(credits).reduce((sum, val) => sum + (typeof val === 'number' ? val : 0), 0);
+    console.log('[ledger] balance from user_wallets fallback:', userId, total, credits);
+    return total;
+  }
+
+  console.log('[ledger] no balance found in ledger or user_wallets:', userId, legacyError?.message);
+  return 0;
 }
 
 /**
@@ -55,6 +82,8 @@ export async function appendLedgerEvent(params: {
 }): Promise<{ success: boolean; entry?: LedgerEntry; error?: string }> {
   const { userId, eventType, delta, idempotencyKey, intentTokenId, metadata, adminApprover } = params;
 
+  console.log('[ledger] appendLedgerEvent called:', { userId, eventType, delta, idempotencyKey });
+
   // admin mutation 검증
   if ((eventType === 'admin_credit' || eventType === 'admin_debit') && !adminApprover) {
     return { success: false, error: 'admin_approver is required for admin mutations' };
@@ -72,17 +101,21 @@ export async function appendLedgerEvent(params: {
     .single();
 
   if (existing) {
+    console.log('[ledger] idempotent - returning existing entry:', idempotencyKey);
     return { success: true, entry: existing as LedgerEntry };
   }
 
   // 2. 현재 잔액 조회 (직렬화된 트랜잭션 보장을 위해 FOR UPDATE 시뮬레이션)
   const currentBalance = await getBalance(userId);
+  console.log('[ledger] currentBalance:', currentBalance);
 
   // 3. 새 잔액 계산
   const newBalance = currentBalance + delta;
+  console.log('[ledger] newBalance:', newBalance);
 
   // 4. 음수 잔액 방지
   if (newBalance < 0) {
+    console.error('[ledger] INSUFFICIENT BALANCE:', { currentBalance, delta, newBalance });
     return { success: false, error: `Insufficient balance: current=${currentBalance}, delta=${delta}` };
   }
 

@@ -52,8 +52,14 @@ BEGIN
     RETURN;
   END IF;
 
+  -- ON CONFLICT와 호환되도록 임시로 모든 RULE 제거 (마이그레이션 후 재생성)
+  DROP RULE IF EXISTS no_update_wallet_ledger ON wallet_ledger;
+  DROP RULE IF EXISTS no_delete_wallet_ledger ON wallet_ledger;
+  DROP RULE IF EXISTS ledger_modify_deny ON wallet_ledger;
+
   -- user_wallets → wallet_ledger 'initial' 이벤트 삽입
   -- JSONB 크레딧 합산: {"gpt-4o": 5, "claude": 3} → 8
+  -- ON CONFLICT 대신 수동 중복 체크 (RULE 호환성)
   WITH credit_totals AS (
     SELECT
       uw.user_id::text                                          AS user_id,
@@ -91,10 +97,19 @@ BEGIN
     'migration-v1'
   FROM credit_totals ct
   WHERE ct.total_credits > 0
-  ON CONFLICT (user_id, idempotency_key) DO NOTHING;
+  AND NOT EXISTS (
+    SELECT 1 FROM wallet_ledger
+    WHERE user_id = ct.user_id
+    AND idempotency_key = 'migration-v1-' || ct.user_id
+  );
 
   GET DIAGNOSTICS v_count = ROW_COUNT;
   RAISE NOTICE '[wallet_ledger_seed] 완료: % 행 삽입 (중복 건너뜀 포함)', v_count;
+
+  -- RULE 재생성 (append-only 보안 복원)
+  CREATE RULE no_update_wallet_ledger AS ON UPDATE TO wallet_ledger DO INSTEAD NOTHING;
+  CREATE RULE no_delete_wallet_ledger AS ON DELETE TO wallet_ledger DO INSTEAD NOTHING;
+  CREATE RULE ledger_modify_deny AS ON INSERT TO wallet_ledger DO INSTEAD NOTHING;
 
 END;
 $$;
