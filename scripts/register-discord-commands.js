@@ -34,18 +34,19 @@ const commands = [
   },
   {
     name: '크레딧',
-    description: '유저의 크레딧을 관리합니다',
+    description: '특정 모델의 크레딧을 추가/설정합니다 (/모델목록으로 ID 확인)',
     options: [
       { name: '이메일', description: '대상 유저 이메일', type: 3, required: true },
+      { name: '모델', description: '모델 ID (예: gpt5, haiku45, sonar)', type: 3, required: true },
       { name: '수량', description: '크레딧 수량', type: 4, required: true },
       {
         name: '방식',
-        description: '추가 또는 설정',
+        description: '추가 또는 설정 (기본: 추가)',
         type: 3,
         required: false,
         choices: [
-          { name: '추가 (기존 + 수량)', value: 'add' },
-          { name: '설정 (수량으로 교체)', value: 'set' },
+          { name: '➕ 추가 (기존 + 수량)', value: 'add' },
+          { name: '🔄 설정 (수량으로 교체)', value: 'set' },
         ],
       },
     ],
@@ -72,6 +73,29 @@ const commands = [
   {
     name: '상태',
     description: 'PickMyAI 시스템 상태를 확인합니다',
+  },
+  {
+    name: '플랜변경',
+    description: '유저의 플랜을 변경합니다 (free/plus/pro/max)',
+    options: [
+      { name: '이메일', description: '대상 유저 이메일', type: 3, required: true },
+      {
+        name: '플랜',
+        description: '변경할 플랜',
+        type: 3,
+        required: true,
+        choices: [
+          { name: '🆓 Free', value: 'free' },
+          { name: '💎 Plus', value: 'plus' },
+          { name: '🔥 Pro', value: 'pro' },
+          { name: '👑 Max', value: 'max' },
+        ],
+      },
+    ],
+  },
+  {
+    name: '모델목록',
+    description: '크레딧 추가 시 사용할 수 있는 모델 ID 목록을 확인합니다',
   },
 ];
 

@@ -12,6 +12,8 @@ import {
   handleBanList,
   handleStatus,
   handleButtonBanIp,
+  handlePlanChange,
+  handleModelList,
 } from '@/lib/discord';
 
 export const runtime = 'nodejs';
@@ -59,9 +61,10 @@ export async function POST(request: Request) {
       }
       case '크레딧': {
         const email = String(getOption(opts, '이메일') || '');
+        const model = String(getOption(opts, '모델') || '');
         const amount = Number(getOption(opts, '수량') || 0);
         const action = String(getOption(opts, '방식') || 'add');
-        responseData = await handleCredit(email, amount, action);
+        responseData = await handleCredit(email, model, amount, action);
         break;
       }
       case '차단': {
@@ -81,6 +84,16 @@ export async function POST(request: Request) {
       }
       case '상태': {
         responseData = await handleStatus();
+        break;
+      }
+      case '플랜변경': {
+        const email = String(getOption(opts, '이메일') || '');
+        const plan = String(getOption(opts, '플랜') || '');
+        responseData = await handlePlanChange(email, plan);
+        break;
+      }
+      case '모델목록': {
+        responseData = await handleModelList();
         break;
       }
       default:
