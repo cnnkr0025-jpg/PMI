@@ -935,7 +935,7 @@ export async function middleware(request: NextRequest, event?: NextFetchEvent) {
   const response = NextResponse.next({ request: { headers: requestHeaders } });
 
   if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(request.method) && isApiPath) {
-    const publicEndpoints = ['/api/auth/login', '/api/auth/register', '/api/auth/social-session'];
+    const publicEndpoints = ['/api/auth/login', '/api/auth/register', '/api/auth/social-session', '/api/discord/interactions'];
     const isPublicEndpoint = publicEndpoints.some(ep => pathname.startsWith(ep));
 
     if (!isPublicEndpoint) {
