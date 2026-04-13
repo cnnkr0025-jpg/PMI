@@ -65,7 +65,7 @@ function getServerDb() {
 }
 
 // Append-only Ledger 기반 크레딧 차감 (wallet_ledger reserve)
-async function consumeChatCredit(userId: string, modelId: string): Promise<boolean> {
+async function consumeChatCredit(userId: string, modelId: string): Promise<{ success: boolean; error?: string }> {
   const key = `chat-use-${modelId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const result = await appendLedgerEvent({
     userId,
@@ -74,7 +74,7 @@ async function consumeChatCredit(userId: string, modelId: string): Promise<boole
     idempotencyKey: key,
     metadata: { modelId, action: 'chat_credit_consume' },
   });
-  return result.success;
+  return { success: result.success, error: result.error };
 }
 
 // Append-only Ledger 기반 크레딧 환불 (오류 보상)
@@ -1423,9 +1423,13 @@ Example style:
       return NextResponse.json({ content: videoResult });
     }
 
-    const creditConsumed = await consumeChatCredit(session.userId, modelId);
-    if (!creditConsumed) {
-      return NextResponse.json({ error: 'ERR_CREDIT_00', reason: '사용 가능한 크레딧이 없습니다.' }, { status: 402 });
+    const creditResult = await consumeChatCredit(session.userId, modelId);
+    if (!creditResult.success) {
+      return NextResponse.json({
+        error: 'ERR_CREDIT_00',
+        reason: '사용 가능한 크레딧이 없습니다.',
+        debug: creditResult.error || 'Unknown error',
+      }, { status: 402 });
     }
     chargedModelId = modelId;
 
