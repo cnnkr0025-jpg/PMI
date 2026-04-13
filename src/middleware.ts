@@ -549,7 +549,7 @@ function countSuspiciousHeaders(request: NextRequest): number {
 // 미들웨어 본체
 // ══════════════════════════════════════════════════════════════
 
-export async function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest, event?: NextFetchEvent) {
   const { pathname } = request.nextUrl;
   const clientIp = getClientIp(request);
   const ua = request.headers.get('user-agent') || '';
@@ -593,12 +593,12 @@ export async function middleware(request: NextRequest) {
         ua: request.headers.get('user-agent') || undefined,
         message: '경로 인젝션 공격이 감지되어 IP가 차단되었습니다.',
       });
-      await sendSecurityAlert({
+      if (event) event.waitUntil(sendSecurityAlert({
         title: '2층 경로 순회/널 바이트 공격',
         severity: 'error',
         message: '경로 인젝션 공격이 감지되어 IP가 차단되었습니다.',
         fields: { IP: clientIp, Pattern: hasPathTraversal(pathname) ? 'Path Traversal' : 'Null Byte', UA: ua },
-      });
+      }));
       return new NextResponse(null, { status: 400 });
     }
 
@@ -689,7 +689,7 @@ export async function middleware(request: NextRequest) {
         ua: ua.slice(0, 100),
         message: '공격 도구 User-Agent가 감지되어 차단되었습니다.',
       });
-      event.waitUntil(sendSecurityAlert({
+      if (event) event.waitUntil(sendSecurityAlert({
         title: '4층 악성 User-Agent 차단',
         severity: 'warn',
         message: '공격 도구 User-Agent가 감지되어 차단되었습니다.',
