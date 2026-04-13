@@ -14,6 +14,8 @@ import {
   handleButtonBanIp,
   handlePlanChange,
   handleModelList,
+  handleCreditStatus,
+  handleSiteHealth,
 } from '@/lib/discord';
 
 export const runtime = 'nodejs';
@@ -94,6 +96,15 @@ export async function POST(request: Request) {
       }
       case '모델목록': {
         responseData = await handleModelList();
+        break;
+      }
+      case '크레딧조회': {
+        const email = String(getOption(opts, '이메일') || '');
+        responseData = await handleCreditStatus(email);
+        break;
+      }
+      case '사이트상태': {
+        responseData = await handleSiteHealth();
         break;
       }
       default:

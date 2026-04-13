@@ -97,6 +97,17 @@ const commands = [
     name: '모델목록',
     description: '크레딧 추가 시 사용할 수 있는 모델 ID 목록을 확인합니다',
   },
+  {
+    name: '크레딧조회',
+    description: '특정 사용자의 현재 크레딧을 모델별로 조회합니다',
+    options: [
+      { name: '이메일', description: '조회할 유저 이메일', type: 3, required: true },
+    ],
+  },
+  {
+    name: '사이트상태',
+    description: 'PMI 사이트 및 DB 연결 상태를 실시간 확인합니다',
+  },
 ];
 
 async function registerCommands() {

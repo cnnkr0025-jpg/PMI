@@ -63,6 +63,67 @@ export async function verifyDiscordRequest(
   }
 }
 
+/** /크레딧조회 email */
+export async function handleCreditStatus(email: string) {
+  try {
+    const u = await findUser(email);
+    if (!u) {
+      return { embeds: [buildEmbed({ title: '❌ 유저 없음', description: `\`${email}\` 를 찾을 수 없습니다.`, color: C.RED })] };
+    }
+
+    const [credits, plan] = await Promise.all([getUserWallet(u.id), getUserPlan(u.id)]);
+
+    const desc = [
+      '## 💰 현재 사용자 크레딧',
+      '',
+      `👤 **유저**  ${u.email}`,
+      `🎫 **플랜**  ${PLAN_LABELS[plan] || plan}`,
+      sep(),
+      '',
+      formatCredits(credits),
+      '',
+      `> 🕐 ${kstNow()}`,
+    ].join('\n');
+
+    return { embeds: [buildEmbed({ title: '💰 크레딧 조회 결과', description: desc, color: C.GREEN })] };
+  } catch (err: unknown) {
+    return errorResponse(`크레딧 조회 실패: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+/** /사이트상태 */
+export async function handleSiteHealth() {
+  try {
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://pickmyai.store';
+
+    const [site, db] = await Promise.all([
+      fetchWithTimeout(siteUrl, 7000),
+      supa('users?select=id&limit=1').then(() => ({ ok: true })).catch(() => ({ ok: false })),
+    ]);
+
+    const siteBadge = site.ok ? '✅ 정상' : '❌ 장애 가능';
+    const dbBadge = db.ok ? '✅ 연결 정상' : '⚠️ 연결 불안정';
+    const overallColor = site.ok && db.ok ? C.GREEN : (site.ok || db.ok ? C.YELLOW : C.RED);
+
+    const desc = [
+      '## 🌐 PMI 사이트 구동 상태',
+      '',
+      `🔗 **URL**  ${siteUrl}`,
+      `📶 **웹 응답**  ${siteBadge}`,
+      `🗄️ **DB 연결**  ${dbBadge}`,
+      `⏱️ **응답시간**  ${site.latencyMs}ms`,
+      `🔢 **HTTP 상태**  ${site.status || 'N/A'}`,
+      '',
+      ...(site.error ? [`> 오류: ${site.error}`] : []),
+      `> 🕐 ${kstNow()}`,
+    ].join('\n');
+
+    return { embeds: [buildEmbed({ title: '🌐 사이트 헬스체크', description: desc, color: overallColor })] };
+  } catch (err: unknown) {
+    return errorResponse(`사이트 상태 확인 실패: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
 // ── Embed 빌더 ──
 interface EmbedField {
   name: string;
@@ -140,6 +201,29 @@ function kstNow(): string {
   return new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
 }
 
+async function fetchWithTimeout(url: string, timeoutMs = 7000): Promise<{ ok: boolean; status: number; latencyMs: number; error?: string }> {
+  const startedAt = Date.now();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    let res = await fetch(url, { method: 'HEAD', signal: controller.signal, cache: 'no-store' });
+    if (res.status === 405 || res.status === 501) {
+      res = await fetch(url, { method: 'GET', signal: controller.signal, cache: 'no-store' });
+    }
+    return { ok: res.ok, status: res.status, latencyMs: Date.now() - startedAt };
+  } catch (err: unknown) {
+    return {
+      ok: false,
+      status: 0,
+      latencyMs: Date.now() - startedAt,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 // ── Supabase REST 헬퍼 ──
 async function supa(path: string, opts?: RequestInit) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -212,7 +296,7 @@ export async function handleUserInfo(email: string) {
     const desc = [
       `## 👤 ${u.name || u.email}`,
       '',
-      `� **이메일**  ${u.email}`,
+      `📧 **이메일**  ${u.email}`,
       `🆔 **ID**  \`${u.id}\``,
       `🎫 **플랜**  ${PLAN_LABELS[plan] || plan}`,
       `📅 **가입일**  ${created}`,
@@ -316,7 +400,7 @@ export async function handleCredit(email: string, model: string, amount: number,
     const desc = [
       `## ${changeIcon} 크레딧 변경 완료`,
       '',
-      `� **유저**  ${u.email}`,
+      `👤 **유저**  ${u.email}`,
       `🤖 **모델**  ${modelName(model)} (\`${model}\`)`,
       '',
       `> 📊 **변경 내역**`,
@@ -486,7 +570,7 @@ export async function handleStatus() {
     const banCount = Array.isArray(bans) ? bans.length : 0;
 
     const desc = [
-      '## � PickMyAI 시스템 상태',
+      '## 📊 PickMyAI 시스템 상태',
       '',
       `👥 **총 유저**  ${userCount}명`,
       `🚫 **활성 차단 IP**  ${banCount}개`,
