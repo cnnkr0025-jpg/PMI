@@ -9,7 +9,10 @@ import {
   requestHasTrustedOrigin,
 } from './serverSecurity';
 
-const SECRET_KEY = process.env.ADMIN_JWT_SECRET || process.env.JWT_SECRET || '';
+const SECRET_KEY = process.env.ADMIN_JWT_SECRET || '';
+if (!SECRET_KEY && typeof window === 'undefined') {
+  console.warn('[SECURITY] ADMIN_JWT_SECRET is not set. Admin features will be unavailable. Do NOT share JWT_SECRET between app and admin.');
+}
 
 // 비밀번호 실패 추적 (IP 기반)
 interface LoginAttempt {

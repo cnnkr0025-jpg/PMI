@@ -53,13 +53,12 @@ export const Admin: React.FC = () => {
   const [localPolicy, setLocalPolicy] = useState(policy);
   const [localExchangeRate, setLocalExchangeRate] = useState(exchangeRateMemo);
   const [localPaymentFee, setLocalPaymentFee] = useState(paymentFeeMemo);
-  const [adminPassword, setAdminPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [activeTab, setActiveTab] = useReactState<'settings' | 'inbox' | 'polls' | 'users' | 'database' | 'messages' | 'inquiries'>('settings');
   const [users, setUsers] = useState<any[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [editingCredits, setEditingCredits] = useState<Record<string, number>>({});
+  const [editingPlan, setEditingPlan] = useState<string>('free');
   const [newPollTitle, setNewPollTitle] = useState('');
   const [newPollDescription, setNewPollDescription] = useState('');
   const [showPollForm, setShowPollForm] = useState(false);
@@ -153,17 +152,8 @@ export const Admin: React.FC = () => {
     setLocalPolicy(policy);
   }, [policy]);
   
-  const handleAdminLogin = () => {
-    // 간단한 비밀번호 체크 (실제로는 서버에서 인증)
-    if (adminPassword === 'admin123') {
-      setAdminMode(true);
-      setShowPassword(false);
-      setAdminPassword('');
-      toast.success('관리자 모드로 전환되었습니다.');
-    } else {
-      toast.error('비밀번호가 올바르지 않습니다.');
-    }
-  };
+  // 관리자 인증은 /admin/login 페이지에서 서버 JWT로만 처리됩니다.
+  // 클라이언트 측 비밀번호 검사는 제거되었습니다.
   
   const handleModelToggle = (modelId: string) => {
     setLocalModels(prev =>
@@ -300,8 +290,8 @@ export const Admin: React.FC = () => {
     }
   };
 
-  // 유저 크레딧 수정
-  const updateUserCredits = async (userId: string, credits: Record<string, number>) => {
+  // 유저 크레딧 및 플랜 수정
+  const updateUserCredits = async (userId: string, credits: Record<string, number>, plan: string) => {
     try {
       let adminToken = 'admin-token';
       try {
@@ -317,78 +307,27 @@ export const Admin: React.FC = () => {
           'Authorization': `Bearer ${adminToken}`,
           'x-admin-path': adminPathHeader,
         },
-        body: JSON.stringify({ userId, credits })
+        body: JSON.stringify({ userId, credits, userPlan: plan }),
       });
       
       if (!response.ok) {
-        throw new Error('크레딧 수정에 실패했습니다.');
+        const d = await response.json().catch(() => ({}));
+        throw new Error(d.error || '수정에 실패했습니다.');
       }
       
-      toast.success('크레딧이 수정되었습니다.');
+      toast.success('유저 정보가 수정되었습니다.');
       setEditingUserId(null);
       setEditingCredits({});
+      setEditingPlan('free');
       fetchUsers();
     } catch (error: any) {
       toast.error(error.message);
     }
   };
   
+  // 인증되지 않은 경우 useEffect에서 로그인 페이지로 리다이렉트 처리됩니다.
   if (!isAdmin) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <Card variant="bordered" className="max-w-md w-full">
-          <CardHeader>
-            <h2 className="text-xl font-semibold">관리자 로그인</h2>
-          </CardHeader>
-          <CardContent className="p-6">
-            {!showPassword ? (
-              <div className="text-center">
-                <Settings className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-                <p className="text-gray-600 mb-4">
-                  관리자 권한이 필요합니다.
-                </p>
-                <Button variant="primary" onClick={() => setShowPassword(true)}>
-                  관리자로 로그인
-                </Button>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    비밀번호
-                  </label>
-                  <input
-                    type="password"
-                    value={adminPassword}
-                    onChange={(e) => setAdminPassword(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && handleAdminLogin()}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    placeholder="비밀번호를 입력하세요"
-                  />
-                  {/* hint removed */}
-                </div>
-                <div className="flex space-x-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => setShowPassword(false)}
-                    className="flex-1"
-                  >
-                    취소
-                  </Button>
-                  <Button
-                    variant="primary"
-                    onClick={handleAdminLogin}
-                    className="flex-1"
-                  >
-                    로그인
-                  </Button>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-    );
+    return null;
   }
   
   return (
@@ -758,6 +697,7 @@ export const Admin: React.FC = () => {
                                 onClick={() => {
                                   setEditingUserId(user.id);
                                   setEditingCredits(credits);
+                                  setEditingPlan(user.userPlan || 'free');
                                 }}
                               >
                                 <Edit2 className="w-4 h-4 mr-1" />
@@ -771,6 +711,7 @@ export const Admin: React.FC = () => {
                                   onClick={() => {
                                     setEditingUserId(null);
                                     setEditingCredits({});
+                                    setEditingPlan('free');
                                   }}
                                 >
                                   <X className="w-4 h-4 mr-1" />
@@ -779,7 +720,7 @@ export const Admin: React.FC = () => {
                                 <Button
                                   variant="primary"
                                   size="sm"
-                                  onClick={() => updateUserCredits(user.id, currentCredits)}
+                                  onClick={() => updateUserCredits(user.id, currentCredits, editingPlan)}
                                 >
                                   <Check className="w-4 h-4 mr-1" />
                                   저장
@@ -789,7 +730,26 @@ export const Admin: React.FC = () => {
                           </div>
                         </div>
                         
-                        <div className="mt-4 pt-4 border-t">
+                        <div className="mt-3 pt-3 border-t">
+                          <div className="flex items-center gap-3 mb-3">
+                            <span className="text-sm font-medium text-gray-700">플랜:</span>
+                            {isEditing ? (
+                              <select
+                                value={editingPlan}
+                                onChange={(e) => setEditingPlan(e.target.value)}
+                                className="px-2 py-1 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                              >
+                                <option value="free">Free</option>
+                                <option value="plus">Plus</option>
+                                <option value="pro">Pro</option>
+                                <option value="max">Max</option>
+                              </select>
+                            ) : (
+                              <Badge variant={user.userPlan === 'max' ? 'success' : user.userPlan === 'pro' ? 'warning' : 'default'}>
+                                {(user.userPlan || 'free').toUpperCase()}
+                              </Badge>
+                            )}
+                          </div>
                           <div className="text-sm font-medium text-gray-700 mb-2">크레딧 정보 (JSON)</div>
                           {isEditing ? (
                             <textarea
@@ -798,8 +758,8 @@ export const Admin: React.FC = () => {
                                 try {
                                   const parsed = JSON.parse(e.target.value);
                                   setEditingCredits(parsed);
-                                } catch (error) {
-                                  // JSON 파싱 에러는 무시 (입력 중일 수 있음)
+                                } catch {
+                                  // JSON 파싱 중 무시
                                 }
                               }}
                               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 font-mono text-sm"

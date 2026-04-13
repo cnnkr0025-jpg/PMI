@@ -20,6 +20,14 @@ export const supabase = createClient(
       persistSession: typeof window !== 'undefined',
       autoRefreshToken: typeof window !== 'undefined',
       flowType: 'pkce',
+      // Supabase 토큰을 localStorage가 아닌 sessionStorage에 저장하여 XSS 피해 최소화
+      ...(typeof window !== 'undefined' ? {
+        storage: {
+          getItem: (key: string) => { try { return sessionStorage.getItem(key); } catch { return null; } },
+          setItem: (key: string, value: string) => { try { sessionStorage.setItem(key, value); } catch {} },
+          removeItem: (key: string) => { try { sessionStorage.removeItem(key); } catch {} },
+        },
+      } : {}),
     },
   }
 );

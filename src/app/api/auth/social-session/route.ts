@@ -52,8 +52,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Supabase Admin 클라이언트로 사용자 정보 확인
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey || supabaseAnonKey);
+    if (!supabaseServiceKey) {
+      console.error('[social-session] SUPABASE_SERVICE_ROLE_KEY is missing');
+      return NextResponse.json({ error: '서버 설정 오류입니다.' }, { status: 500 });
+    }
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
     
     const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(resolvedAccessToken);
 

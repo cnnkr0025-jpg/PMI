@@ -61,114 +61,49 @@ function getServerDb() {
   return createClient(supabaseUrl, supabaseServiceKey);
 }
 
+// 원자적 크레딧 차감 — DB RPC(SELECT FOR UPDATE) 사용으로 동시 요청 이중 차감 방지
 async function consumeChatCredit(userId: string, modelId: string): Promise<boolean> {
   const db = getServerDb();
-  const walletResult = await db.from('user_wallets').select('credits').eq('user_id', userId).single();
-  const credits = (walletResult.data?.credits as Record<string, number> | null) || {};
-  const available = Number(credits[modelId] || 0);
-
-  if (!Number.isFinite(available) || available <= 0) {
-    return false;
-  }
-
-  const nextCredits = { ...credits, [modelId]: available - 1 };
-  if (nextCredits[modelId] <= 0) {
-    delete nextCredits[modelId];
-  }
-
-  const updateResult = await db
-    .from('user_wallets')
-    .update({ credits: nextCredits, updated_at: new Date().toISOString() })
-    .eq('user_id', userId)
-    .select('user_id')
-    .limit(1);
-
-  if (updateResult.error) {
-    throw new Error('[ERR_CREDIT_01] Failed to consume credit.');
-  }
-
-  await db.from('transactions').insert({
-    user_id: userId,
-    type: 'usage',
-    model_id: modelId,
-    credits: { [modelId]: -1 },
-    description: 'AI 응답 사용',
+  const { data, error } = await db.rpc('consume_credit_atomic', {
+    p_user_id: userId,
+    p_model_id: modelId,
+    p_amount: 1,
   });
-
-  return true;
+  if (error) throw new Error('[ERR_CREDIT_01] Failed to consume credit.');
+  return data === true;
 }
 
+// 원자적 크레딧 환불 — 오류 보상 시 사용
 async function refundChatCredit(userId: string, modelId: string): Promise<void> {
   const db = getServerDb();
-  const walletResult = await db.from('user_wallets').select('credits').eq('user_id', userId).single();
-  const credits = (walletResult.data?.credits as Record<string, number> | null) || {};
-  const nextCredits = { ...credits, [modelId]: (Number(credits[modelId] || 0) || 0) + 1 };
-
-  await db
-    .from('user_wallets')
-    .update({ credits: nextCredits, updated_at: new Date().toISOString() })
-    .eq('user_id', userId);
-
-  await db.from('transactions').insert({
-    user_id: userId,
-    type: 'purchase',
-    credits: { [modelId]: 1 },
-    description: 'AI 오류 보상 환불',
+  await db.rpc('refund_credit_atomic', {
+    p_user_id: userId,
+    p_model_id: modelId,
+    p_amount: 1,
+    p_reason: 'AI 오류 보상 환불',
   });
 }
 
-// 영상 모델: 잔액 확인 후 seconds만큼 차감 (서버에서 초 단위 검증)
+// 영상 모델: 초 단위 원자 차감
 async function consumeVideoCredits(userId: string, modelId: string, seconds: number): Promise<boolean> {
   const db = getServerDb();
-  const walletResult = await db.from('user_wallets').select('credits').eq('user_id', userId).single();
-  const credits = (walletResult.data?.credits as Record<string, number> | null) || {};
-  const available = Number(credits[modelId] || 0);
-
-  if (!Number.isFinite(available) || available < seconds) {
-    return false;
-  }
-
-  const nextCredits = { ...credits, [modelId]: available - seconds };
-  if (nextCredits[modelId] <= 0) delete nextCredits[modelId];
-
-  const updateResult = await db
-    .from('user_wallets')
-    .update({ credits: nextCredits, updated_at: new Date().toISOString() })
-    .eq('user_id', userId)
-    .select('user_id')
-    .limit(1);
-
-  if (updateResult.error) {
-    throw new Error('[ERR_CREDIT_01] Failed to consume video credit.');
-  }
-
-  await db.from('transactions').insert({
-    user_id: userId,
-    type: 'usage',
-    model_id: modelId,
-    credits: { [modelId]: -seconds },
-    description: `영상 생성 사용 (${seconds}초)`,
+  const { data, error } = await db.rpc('consume_credit_atomic', {
+    p_user_id: userId,
+    p_model_id: modelId,
+    p_amount: seconds,
   });
-
-  return true;
+  if (error) throw new Error('[ERR_CREDIT_01] Failed to consume video credit.');
+  return data === true;
 }
 
+// 영상 모델: 초 단위 원자 환불
 async function refundVideoCredits(userId: string, modelId: string, seconds: number): Promise<void> {
   const db = getServerDb();
-  const walletResult = await db.from('user_wallets').select('credits').eq('user_id', userId).single();
-  const credits = (walletResult.data?.credits as Record<string, number> | null) || {};
-  const nextCredits = { ...credits, [modelId]: (Number(credits[modelId] || 0) || 0) + seconds };
-
-  await db
-    .from('user_wallets')
-    .update({ credits: nextCredits, updated_at: new Date().toISOString() })
-    .eq('user_id', userId);
-
-  await db.from('transactions').insert({
-    user_id: userId,
-    type: 'purchase',
-    credits: { [modelId]: seconds },
-    description: `영상 생성 오류 환불 (${seconds}초)`,
+  await db.rpc('refund_credit_atomic', {
+    p_user_id: userId,
+    p_model_id: modelId,
+    p_amount: seconds,
+    p_reason: `영상 생성 오류 환불 (${seconds}초)`,
   });
 }
 
@@ -268,11 +203,29 @@ function hasMeaningfulMessageContent(content: unknown): boolean {
   });
 }
 
-function extractBase64(dataUrl: string): { mime: string; base64: string } | null {
+const ALLOWED_MIME_TYPES = new Set([
+  'image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/svg+xml',
+  'text/plain', 'text/csv', 'application/pdf',
+]);
+
+const MIME_EXTENSION_MAP: Record<string, string[]> = {
+  'image/png': ['png'], 'image/jpeg': ['jpg', 'jpeg'], 'image/gif': ['gif'],
+  'image/webp': ['webp'], 'image/svg+xml': ['svg'],
+  'text/plain': ['txt'], 'text/csv': ['csv'], 'application/pdf': ['pdf'],
+};
+
+function extractBase64(dataUrl: string, filename?: string): { mime: string; base64: string } | null {
   try {
     const match = dataUrl.match(/^data:(.*?);base64,(.*)$/);
     if (!match) return null;
-    return { mime: match[1], base64: match[2] };
+    const mime = match[1];
+    if (!ALLOWED_MIME_TYPES.has(mime)) return null;
+    if (filename) {
+      const ext = filename.split('.').pop()?.toLowerCase() || '';
+      const allowedExts = MIME_EXTENSION_MAP[mime];
+      if (allowedExts && !allowedExts.includes(ext)) return null;
+    }
+    return { mime, base64: match[2] };
   } catch {
     return null;
   }
@@ -1414,6 +1367,27 @@ Example style:
       }
     }
 
+    // ── 비즈니스 로직 함정: 메시지 내 공격 페이로드 탐지 ──
+    const lastContent = typeof lastUserMsg.content === 'string' ? lastUserMsg.content : '';
+    const PROMPT_INJECTION_PATTERNS = [
+      /ignore\s+(all\s+)?previous\s+instructions/i,
+      /disregard\s+(all\s+)?(your\s+)?(rules|instructions|guidelines)/i,
+      /you\s+are\s+now\s+(a|an|DAN|jailbroken|evil)/i,
+      /\bDAN\s+(mode|prompt)\b/i,
+      /system\s*:\s*(you|ignore|forget|override)/i,
+      /\[INST\]|\[\/INST\]|<\|im_start\|>|<\|im_end\|>/,
+      /reveal\s+(your|the)\s+(system|initial|original)\s+prompt/i,
+      /repeat\s+(the|your)\s+(system|initial)\s+(message|prompt)/i,
+    ];
+    const isPromptInjection = PROMPT_INJECTION_PATTERNS.some(p => p.test(lastContent));
+    if (isPromptInjection) {
+      console.warn('[chat] Prompt injection attempt:', {
+        userId: session.userId, modelId,
+        snippet: lastContent.slice(0, 200),
+        ip: getClientIp(request),
+      });
+    }
+
     // 영상 모델: 보유 초 검증 후 초 단위 차감 (일반 모델보다 먼저 처리)
     if (GROK_VIDEO_IDS.has(modelId)) {
       const duration = Math.max(1, Math.min(50, Number(videoSeconds) || 5));
@@ -1452,16 +1426,38 @@ Example style:
     // GPT 스트리밍 가능 모델 (이미지 제외)
     const isStreamableGPT = isOpenAIModel && !IMAGE_MODEL_IDS.has(modelId);
 
-    // GPT 스트리밍 모델: ReadableStream으로 감싸서 즉시 반환 (Netlify 안전 패턴)
+    // GPT 스트리밍 모델: TransformStream으로 감싸서 반환
+    // 스트림 중간 오류 감지 시 서버에서 크레딧 환불 처리
     if (isStreamableGPT && OPENAI_STREAMING_ALLOWED) {
       const openaiRes = await callOpenAI(modelId, messages, userAttachments, persona, languageInstructionWithMemory, true, normalizedChainMaxOutputTokens) as Response;
       if (!openaiRes.body) {
         throw new Error('OpenAI response has no body');
       }
 
-      return new Response(openaiRes.body, {
-        headers: OPENAI_STREAM_HEADERS,
-      });
+      const capturedUserId = session.userId;
+      const capturedModelId = modelId;
+      const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
+      const writer = writable.getWriter();
+
+      // 스트림을 파이프하면서 오류 발생 시 크레딧 자동 환불
+      (async () => {
+        const reader = openaiRes.body!.getReader();
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            await writer.write(value);
+          }
+          await writer.close();
+        } catch {
+          await writer.abort(new Error('Stream interrupted'));
+          try {
+            await refundChatCredit(capturedUserId, capturedModelId);
+          } catch {}
+        }
+      })();
+
+      return new Response(readable, { headers: OPENAI_STREAM_HEADERS });
     }
 
     // Grok 이미지 생성 모델: JSON 응답

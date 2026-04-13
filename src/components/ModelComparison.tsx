@@ -55,7 +55,8 @@ export const ModelComparison: React.FC = () => {
 
     const tasks = selectedModels.map(async (modelId) => {
       try {
-        if (!deductCredit(modelId)) {
+        const deducted = await deductCredit(modelId);
+        if (!deducted) {
           updateComparisonResponse(sessionId, modelId, {
             content: `${modelId} 크레딧 부족`,
             timestamp: new Date(),

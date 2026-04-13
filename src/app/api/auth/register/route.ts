@@ -10,6 +10,7 @@ import {
   getSecureClientIp,
   safeParseJson,
 } from '@/lib/secureAuth';
+import { securityLogger } from '@/lib/securityLogger';
 
 const registerRateLimiter = new RateLimiter(3, 60 * 60 * 1000); // 1시간에 3회
 
@@ -42,9 +43,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { email, password, name } = parseResult.data;
+    const { email, password, name, agreedToTerms } = parseResult.data;
 
-    // 타입 및 형식 검증
+    if (agreedToTerms !== true) {
+      return NextResponse.json(
+        { error: '이용약관 및 개인정보처리방침에 동의해야 합니다.' },
+        { status: 400 }
+      );
+    }
+
     if (!isValidEmail(email)) {
       return NextResponse.json(
         { error: '올바른 이메일 형식이 아닙니다.' },
@@ -73,13 +80,13 @@ export async function POST(request: NextRequest) {
     const result = await AuthService.register(email as string, password as string, sanitizedName);
 
     if (!result.success) {
+      securityLogger.logAuthFailure(email as string, clientIp, `register: ${result.error || 'unknown'}`);
       return NextResponse.json(
         { error: result.error || '회원가입에 실패했습니다.' },
         { status: 400 }
       );
     }
 
-    // 이메일 인증이 필요한 경우
     if (result.requiresEmailVerification) {
       return NextResponse.json({
         success: true,

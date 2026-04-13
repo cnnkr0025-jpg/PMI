@@ -206,25 +206,32 @@ export function validateRequestHeaders(headers: Headers): {
 /**
  * API 키 노출 방지 - 응답 데이터 검증
  */
+const SENSITIVE_KEY_PATTERNS = [
+  'apikey', 'api_key', 'secret', 'password', 'token', 'authorization',
+  'cookie', 'session', 'refresh', 'bearer', 'credential', 'private_key',
+];
+
 export function sanitizeResponse(data: any): any {
   if (typeof data === 'string') {
-    // API 키 패턴 제거
     return data
       .replace(/sk-[a-zA-Z0-9]{20,}/g, '[REDACTED]')
       .replace(/sk-ant-[a-zA-Z0-9-]{20,}/g, '[REDACTED]')
       .replace(/AIza[a-zA-Z0-9_-]{35}/g, '[REDACTED]')
-      .replace(/pplx-[a-zA-Z0-9]{20,}/g, '[REDACTED]');
+      .replace(/pplx-[a-zA-Z0-9]{20,}/g, '[REDACTED]')
+      .replace(/xai-[a-zA-Z0-9]{20,}/g, '[REDACTED]')
+      .replace(/eyJ[a-zA-Z0-9_-]{20,}\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+/g, '[JWT_REDACTED]')
+      .replace(/Bearer\s+[a-zA-Z0-9._-]+/gi, 'Bearer [REDACTED]');
   }
-  
+
   if (Array.isArray(data)) {
     return data.map(item => sanitizeResponse(item));
   }
-  
+
   if (typeof data === 'object' && data !== null) {
     const sanitized: any = {};
     for (const [key, value] of Object.entries(data)) {
-      // API 키 관련 필드 제거
-      if (key.toLowerCase().includes('apikey') || key.toLowerCase().includes('api_key')) {
+      const lk = key.toLowerCase();
+      if (SENSITIVE_KEY_PATTERNS.some(p => lk.includes(p))) {
         sanitized[key] = '[REDACTED]';
       } else {
         sanitized[key] = sanitizeResponse(value);
@@ -232,7 +239,7 @@ export function sanitizeResponse(data: any): any {
     }
     return sanitized;
   }
-  
+
   return data;
 }
 

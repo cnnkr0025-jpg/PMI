@@ -13,6 +13,7 @@ import {
 import { isMfaEnabled } from '@/lib/mfa';
 import { generateMfaPendingToken } from '@/lib/adminMfa';
 import { evaluateRisk, recordAdminBurst } from '@/lib/riskScore';
+import { alertAuthFailure } from '@/lib/alerting';
 
 export async function POST(request: NextRequest) {
   try {
@@ -23,22 +24,26 @@ export async function POST(request: NextRequest) {
 
     const secretPath = getAdminSecretPath();
     const requestAdminPath = getRequestAdminPath(request);
+    const clientIp = getClientIpFromRequest(request);
+    const userAgent = request.headers.get('user-agent') || 'unknown';
+
+    // 관리자 경로를 모르는 접근 → burst 기록 + 가짜 404
     if (!secretPath || requestAdminPath !== secretPath) {
+      recordAdminBurst(clientIp);
       return NextResponse.json({ error: '찾을 수 없습니다.' }, { status: 404 });
     }
 
     const body = await request.json().catch(() => null);
     const password = typeof body?.password === 'string' ? body.password : '';
-    const clientIp = getClientIpFromRequest(request);
 
     if (!password) {
       return NextResponse.json({ error: '비밀번호를 입력해주세요.' }, { status: 400 });
     }
 
     // Risk Score 평가 — 고위험 IP는 로그인 시도 전 차단
-    const userAgent = request.headers.get('user-agent') || 'unknown';
     const risk = evaluateRisk({ ip: clientIp, userAgent, pathname: '/api/admin/login' });
     if (risk.action === 'criticalBlock' || risk.action === 'tempBlock') {
+      alertAuthFailure(clientIp, 'admin', `Risk score ${risk.score} — 자동 차단`);
       return NextResponse.json(
         { error: `비정상적인 접근 패턴이 감지되었습니다. (Risk: ${risk.score})` },
         { status: 429 }
@@ -62,6 +67,9 @@ export async function POST(request: NextRequest) {
     const attemptResult = recordLoginAttempt(clientIp, isValid);
 
     if (!isValid) {
+      recordAdminBurst(clientIp);
+      alertAuthFailure(clientIp, 'admin', '관리자 비밀번호 불일치');
+
       if (!attemptResult.allowed) {
         const remainingTime = Math.ceil((attemptResult.lockedUntil! - Date.now()) / 1000 / 60);
         return NextResponse.json({

@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { verifySession } from '@/lib/apiAuth';
 import { enforceTrustedOrigin, getAvailablePmcAmount, setNoStoreHeaders, verifyOrderToken } from '@/lib/serverSecurity';
+import { securityLogger } from '@/lib/securityLogger';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -46,7 +47,25 @@ export async function POST(req: NextRequest) {
     }
 
     const signedOrder = await verifyOrderToken(orderToken);
-    if (signedOrder.userId !== session.userId || signedOrder.orderId !== orderId || signedOrder.amount !== requestAmount) {
+
+    // ── 비즈니스 로직 함정: 결제 변조 탐지 ──
+    const tampering: string[] = [];
+    if (signedOrder.userId !== session.userId) tampering.push('userId mismatch');
+    if (signedOrder.orderId !== orderId) tampering.push('orderId mismatch');
+    if (signedOrder.amount !== requestAmount) tampering.push(`amount ${signedOrder.amount}→${requestAmount}`);
+
+    if (tampering.length > 0) {
+      const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || req.headers.get('x-real-ip') || 'unknown';
+      console.error('[toss/confirm] TAMPER DETECTED:', {
+        userId: session.userId, orderId, tampering,
+        signedAmount: signedOrder.amount, requestAmount,
+        ip, ua: (req.headers.get('user-agent') || '').slice(0, 200),
+        timestamp: new Date().toISOString(),
+      });
+      securityLogger.logSuspiciousActivity({
+        type: 'PAYMENT_TAMPER', userId: session.userId, orderId, tampering,
+        signedAmount: signedOrder.amount, requestAmount,
+      }, ip);
       return NextResponse.json({ error: 'ERR_ORDER', reason: '주문 검증에 실패했습니다.' }, { status: 403 });
     }
 
@@ -88,15 +107,39 @@ export async function POST(req: NextRequest) {
     }
 
     const db = getDb();
-    const txDescription = `TOSS:${orderId}`;
-    const existingTx = await db
-      .from('transactions')
-      .select('id')
-      .eq('user_id', session.userId)
-      .eq('description', txDescription)
-      .limit(1);
 
-    if (existingTx.data && existingTx.data.length > 0) {
+    // confirm_purchase_atomic RPC:
+    // - SELECT FOR UPDATE 행 잠금으로 동시 요청 이중 충전 방지
+    // - wallet 갱신 + transaction 삽입을 단일 DB 트랜잭션으로 처리
+    // - TOSS:{orderId} UNIQUE 인덱스로 중복 삽입 거부
+    const { data: rpcResult, error: rpcError } = await db.rpc('confirm_purchase_atomic', {
+      p_user_id: session.userId,
+      p_order_id: orderId,
+      p_amount: signedOrder.amount,
+      p_credits: signedOrder.credits,
+    });
+
+    if (rpcError) {
+      // Toss 승인은 성공했으나 DB 처리 실패 → 심각한 불일치 상황
+      // 상세 로그 기록 후 운영자가 수동 복구할 수 있도록 함
+      console.error('[toss/confirm] CRITICAL: Toss approved but DB failed. Manual recovery needed.', {
+        userId: session.userId,
+        orderId,
+        amount: signedOrder.amount,
+        credits: signedOrder.credits,
+        error: rpcError,
+        timestamp: new Date().toISOString(),
+      });
+      return NextResponse.json(
+        { error: '결제는 완료되었으나 크레딧 반영에 실패했습니다. 고객센터에 문의해주세요.', orderId },
+        { status: 500 }
+      );
+    }
+
+    const alreadyProcessed = rpcResult?.already_processed === true;
+    const mergedCredits = rpcResult?.credits as Record<string, number> | null;
+
+    if (alreadyProcessed) {
       const walletResult = await db.from('user_wallets').select('credits').eq('user_id', session.userId).single();
       const settingsResult = await db.from('user_settings').select('data').eq('user_id', session.userId).single();
       return setNoStoreHeaders(NextResponse.json({
@@ -106,31 +149,6 @@ export async function POST(req: NextRequest) {
         settings: settingsResult.data?.data || null,
       }));
     }
-
-    const walletResult = await db.from('user_wallets').select('credits').eq('user_id', session.userId).single();
-    const currentCredits = (walletResult.data?.credits as Record<string, number> | null) || {};
-    const mergedCredits = { ...currentCredits };
-    for (const [modelId, qty] of Object.entries(signedOrder.credits)) {
-      mergedCredits[modelId] = (mergedCredits[modelId] || 0) + Math.max(0, Number(qty) || 0);
-    }
-
-    await db
-      .from('user_wallets')
-      .upsert({
-        user_id: session.userId,
-        credits: mergedCredits,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'user_id' });
-
-    await db
-      .from('transactions')
-      .insert({
-        user_id: session.userId,
-        type: 'purchase',
-        amount: signedOrder.amount,
-        credits: signedOrder.credits,
-        description: txDescription,
-      });
 
     const settingsResult = await db.from('user_settings').select('data').eq('user_id', session.userId).single();
     const settings = (settingsResult.data?.data as Record<string, any> | null) || {};
@@ -180,7 +198,12 @@ export async function POST(req: NextRequest) {
         updated_at: new Date().toISOString(),
       }, { onConflict: 'user_id' });
 
-    return setNoStoreHeaders(NextResponse.json({ ok: true, data, walletCredits: mergedCredits, settings: { ...settings, pmcBalance: nextPmcBalance } }));
+    return setNoStoreHeaders(NextResponse.json({
+      ok: true,
+      data,
+      walletCredits: mergedCredits || signedOrder.credits,
+      settings: { ...settings, pmcBalance: nextPmcBalance },
+    }));
   } catch (e: unknown) {
     if (process.env.NODE_ENV !== 'production') {
       console.error('[toss/confirm] Unexpected error:', e);

@@ -35,17 +35,31 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: 'userId가 필요합니다.' }, { status: 400 });
         }
         
-        await adminClient.from('user_wallets').delete().eq('user_id', userId);
-        await adminClient.from('chat_sessions').delete().eq('user_id', userId);
-        await adminClient.from('users').delete().eq('id', userId);
+        // withdraw_user RPC: 거래 기록은 비식별화 보존(전자상거래법 5년)
+        // 개인정보(settings, wallets, sessions)는 즉시 삭제
+        const { data: rpcResult, error: rpcError } = await adminClient.rpc('withdraw_user', {
+          p_user_id: userId,
+        });
+
+        if (rpcError) {
+          console.error('withdraw_user RPC error:', rpcError);
+          // RPC 실패 시 수동 삭제 폴백 (거래 기록 비식별화 우선)
+          await adminClient.from('transactions').update({ user_id: null }).eq('user_id', userId);
+          await adminClient.from('user_settings').delete().eq('user_id', userId);
+          await adminClient.from('user_wallets').delete().eq('user_id', userId);
+          await adminClient.from('chat_sessions').delete().eq('user_id', userId);
+          await adminClient.from('users').delete().eq('id', userId);
+        }
         
         const { error: authError } = await adminClient.auth.admin.deleteUser(userId);
-        
         if (authError) {
           console.error('Auth user deletion error:', authError);
         }
         
-        return NextResponse.json({ success: true });
+        return NextResponse.json({
+          success: true,
+          preservedTransactions: rpcResult?.preserved_transactions ?? 0,
+        });
       }
 
       default:

@@ -8,6 +8,8 @@ import {
   getSecureClientIp,
   safeParseJson,
 } from '@/lib/secureAuth';
+import { alertAuthFailure } from '@/lib/alerting';
+import { securityLogger } from '@/lib/securityLogger';
 
 const loginRateLimiter = new RateLimiter(5, 15 * 60 * 1000); // 15분에 5회
 
@@ -61,9 +63,8 @@ export async function POST(request: NextRequest) {
     const result = await AuthService.login(email, password);
 
     if (!result.success || !result.user) {
-      if (process.env.NODE_ENV !== 'production') {
-        console.error('[login] Login failed:', result.error);
-      }
+      alertAuthFailure(clientIp, email as string, result.error || 'unknown');
+      securityLogger.logAuthFailure(email as string, clientIp, result.error || 'unknown');
       return NextResponse.json(
         { error: result.error || '로그인에 실패했습니다.' },
         { status: 401 }
@@ -77,9 +78,7 @@ export async function POST(request: NextRequest) {
       name: result.user.name,
     });
 
-    if (process.env.NODE_ENV !== 'production') {
-      console.log('[login] Login successful for user:', result.user.email);
-    }
+    securityLogger.logAuthSuccess(result.user.id, clientIp, request.headers.get('user-agent') || undefined);
 
     // HttpOnly 쿠키 설정
     const response = NextResponse.json({

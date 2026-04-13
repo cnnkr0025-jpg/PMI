@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { SignJWT, jwtVerify, importPKCS8, importSPKI } from 'jose';
 import crypto from 'crypto';
+import { alertTokenReuse } from '@/lib/alerting';
 
 type JWTKey = Awaited<ReturnType<typeof importPKCS8>>;
 
@@ -17,10 +18,44 @@ type JWTKey = Awaited<ReturnType<typeof importPKCS8>>;
 const ACCESS_TOKEN_EXPIRY = '30d';
 const REFRESH_TOKEN_EXPIRY = '7d';
 const MAX_SESSIONS_PER_USER = 5;
+const JWT_ISSUER = 'pick-my-ai';
+const JWT_AUDIENCE = 'pick-my-ai:session';
 
-// ── 세션 블랙리스트 (프로덕션에서는 Redis/Supabase 사용 권장) ──
+// ── 세션 블랙리스트 (인메모리 + DB 동기화) ──
 const sessionBlacklist = new Set<string>();
 const SESSION_BLACKLIST_MAX = 10_000;
+
+async function persistBlacklistEntry(jti: string, expiresAt: number): Promise<void> {
+  try {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!supabaseUrl || !supabaseServiceKey) return;
+    const { createClient } = await import('@supabase/supabase-js');
+    const db = createClient(supabaseUrl, supabaseServiceKey);
+    await db.from('session_blacklist').upsert({
+      jti,
+      expires_at: new Date(expiresAt).toISOString(),
+    }, { onConflict: 'jti' });
+  } catch {}
+}
+
+async function isBlacklistedInDb(jti: string): Promise<boolean> {
+  try {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!supabaseUrl || !supabaseServiceKey) return false;
+    const { createClient } = await import('@supabase/supabase-js');
+    const db = createClient(supabaseUrl, supabaseServiceKey);
+    const { data } = await db.from('session_blacklist')
+      .select('jti')
+      .eq('jti', jti)
+      .gt('expires_at', new Date().toISOString())
+      .limit(1);
+    return (data?.length ?? 0) > 0;
+  } catch {
+    return false;
+  }
+}
 
 // ── Refresh Token 저장소 (프로덕션: Supabase refresh_tokens 테이블) ──
 // { tokenHash → { userId, deviceId, familyId, usedAt? } }
@@ -172,8 +207,10 @@ export async function createAccessToken(payload: {
     return new SignJWT({ ...payload, jti, tokenType: 'access' })
       .setProtectedHeader({ alg: 'RS256', typ: 'JWT' })
       .setIssuedAt()
+      .setNotBefore('0s')
       .setExpirationTime(ACCESS_TOKEN_EXPIRY)
-      .setIssuer('pick-my-ai')
+      .setIssuer(JWT_ISSUER)
+      .setAudience(JWT_AUDIENCE)
       .sign(rsaKey);
   }
 
@@ -183,8 +220,10 @@ export async function createAccessToken(payload: {
   return new SignJWT({ ...payload, jti, tokenType: 'access' })
     .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
     .setIssuedAt()
+    .setNotBefore('0s')
     .setExpirationTime(ACCESS_TOKEN_EXPIRY)
-    .setIssuer('pick-my-ai')
+    .setIssuer(JWT_ISSUER)
+    .setAudience(JWT_AUDIENCE)
     .sign(hs256Key);
 }
 
@@ -208,8 +247,10 @@ export async function createRefreshToken(payload: {
     token = await new SignJWT({ ...payload, jti, tokenType: 'refresh', familyId })
       .setProtectedHeader({ alg: 'RS256', typ: 'JWT' })
       .setIssuedAt()
+      .setNotBefore('0s')
       .setExpirationTime(REFRESH_TOKEN_EXPIRY)
-      .setIssuer('pick-my-ai')
+      .setIssuer(JWT_ISSUER)
+      .setAudience(JWT_AUDIENCE)
       .sign(rsaKey);
   } else {
     const hs256Key = getHs256Key();
@@ -217,8 +258,10 @@ export async function createRefreshToken(payload: {
     token = await new SignJWT({ ...payload, jti, tokenType: 'refresh', familyId })
       .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
       .setIssuedAt()
+      .setNotBefore('0s')
       .setExpirationTime(REFRESH_TOKEN_EXPIRY)
-      .setIssuer('pick-my-ai')
+      .setIssuer(JWT_ISSUER)
+      .setAudience(JWT_AUDIENCE)
       .sign(hs256Key);
   }
 
@@ -271,7 +314,7 @@ export async function createSecureToken(payload: {
 // ── 토큰 검증 ──
 
 /**
- * 토큰 검증 (RS256 우선, HS256 폴백 — 마이그레이션 호환)
+ * 토큰 검증 — RS256 키가 있으면 RS256만, 없으면 HS256만 (폴백 없음)
  */
 export async function verifySecureToken(token: string): Promise<{
   valid: boolean;
@@ -279,15 +322,11 @@ export async function verifySecureToken(token: string): Promise<{
   error?: string;
   expired?: boolean;
 }> {
-  // RS256 시도
   const rsaPubKey = await getRsaPublicKey();
-  if (rsaPubKey) {
-    const result = await tryVerifyToken(token, rsaPubKey, 'RS256');
-    if (result.valid) return result;
-    // RS256 실패 + HS256 키가 있으면 폴백 시도
+  if (rsaPubKey && useRs256()) {
+    return tryVerifyToken(token, rsaPubKey, 'RS256');
   }
 
-  // HS256 폴백 (마이그레이션 기간 호환)
   const hs256Key = getHs256Key();
   if (hs256Key) {
     return tryVerifyToken(token, hs256Key, 'HS256');
@@ -302,11 +341,14 @@ async function tryVerifyToken(
   alg: 'RS256' | 'HS256'
 ): Promise<{ valid: boolean; payload?: TokenPayload; error?: string; expired?: boolean }> {
   try {
-    const { payload } = await jwtVerify(token, key, { algorithms: [alg] });
+    const { payload } = await jwtVerify(token, key, {
+      algorithms: [alg],
+      issuer: JWT_ISSUER,
+      audience: JWT_AUDIENCE,
+    });
     const jti = (payload.jti || payload.jti) as string || '';
 
-    // 블랙리스트 확인
-    if (jti && sessionBlacklist.has(jti)) {
+    if (jti && (sessionBlacklist.has(jti) || await isBlacklistedInDb(jti))) {
       return { valid: false, error: '무효화된 세션입니다.' };
     }
 
@@ -363,9 +405,9 @@ export async function rotateRefreshToken(refreshToken: string): Promise<{
     return { success: false, error: '리프레시 토큰이 무효화되었습니다.' };
   }
 
-  // 재사용 감지 → 전체 패밀리 무효화 (토큰 탈취 대응)
   if (stored.used) {
     invalidateTokenFamily(stored.familyId);
+    alertTokenReuse(stored.userId, 'unknown');
     return { success: false, error: '토큰 재사용 감지: 모든 세션이 무효화되었습니다.' };
   }
 
@@ -396,6 +438,8 @@ export function invalidateSession(jti: string): void {
     if (oldest !== undefined) sessionBlacklist.delete(oldest);
   }
   sessionBlacklist.add(jti);
+  const expiresAt = Date.now() + 24 * 60 * 60 * 1000;
+  persistBlacklistEntry(jti, expiresAt).catch(() => {});
   setTimeout(() => { sessionBlacklist.delete(jti); }, 24 * 60 * 60 * 1000);
 }
 
@@ -454,14 +498,31 @@ export function invalidateDeviceSession(userId: string, deviceId: string): void 
 /**
  * 안전한 클라이언트 IP 추출
  */
-export function getSecureClientIp(request: NextRequest): string {
-  const trustedProxies = ['vercel', 'netlify', 'cloudflare'];
-  const host = request.headers.get('host') || '';
-  const isTrustedProxy = trustedProxies.some(proxy =>
-    host.includes(proxy) || process.env.TRUSTED_PROXY === proxy
-  );
+// TRUSTED_PROXY_CIDRS: 쉼표 구분 CIDR 목록 (예: "173.245.48.0/20,103.21.244.0/22")
+const TRUSTED_CIDRS: string[] = (process.env.TRUSTED_PROXY_CIDRS || '').split(',').filter(Boolean);
 
-  if (isTrustedProxy) {
+function ipInCidr(ip: string, cidr: string): boolean {
+  const [range, bits] = cidr.split('/');
+  if (!range || !bits) return false;
+  const mask = ~(2 ** (32 - parseInt(bits)) - 1);
+  const ipNum = ip.split('.').reduce((acc, oct) => (acc << 8) + parseInt(oct), 0);
+  const rangeNum = range.split('.').reduce((acc, oct) => (acc << 8) + parseInt(oct), 0);
+  return (ipNum & mask) === (rangeNum & mask);
+}
+
+function isFromTrustedProxy(request: NextRequest): boolean {
+  const host = request.headers.get('host') || '';
+  const trustedNames = ['vercel', 'netlify', 'cloudflare'];
+  if (trustedNames.some(n => host.includes(n) || process.env.TRUSTED_PROXY === n)) return true;
+  if (TRUSTED_CIDRS.length > 0) {
+    const connectingIp = request.headers.get('cf-connecting-ip') || request.headers.get('x-real-ip') || '';
+    if (connectingIp && TRUSTED_CIDRS.some(cidr => ipInCidr(connectingIp, cidr))) return true;
+  }
+  return false;
+}
+
+export function getSecureClientIp(request: NextRequest): string {
+  if (isFromTrustedProxy(request)) {
     const forwarded = request.headers.get('x-forwarded-for');
     if (forwarded) {
       const ip = forwarded.split(',')[0].trim();
