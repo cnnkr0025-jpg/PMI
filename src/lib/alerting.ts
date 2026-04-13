@@ -131,11 +131,23 @@ async function sendDiscordAlert(payload: AlertPayload): Promise<void> {
     },
   };
 
+  // IP 필드가 있으면 '즉시 차단' 버튼 추가 (Discord 관제소 연동)
+  const ip = payload.fields?.['IP'];
+  const components = (ip && payload.severity !== 'info') ? [{
+    type: 1, // ACTION_ROW
+    components: [{
+      type: 2, // BUTTON
+      style: 4, // DANGER
+      label: `🚫 ${ip} 즉시 차단`,
+      custom_id: `ban_ip:${ip}`,
+    }],
+  }] : undefined;
+
   try {
     await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ embeds: [embed] }),
+      body: JSON.stringify({ embeds: [embed], components }),
     });
   } catch (err) {
     if (process.env.NODE_ENV !== 'production') {

@@ -384,6 +384,34 @@ function isIpBanned(ip: string): boolean {
   return true;
 }
 
+// ── Discord 관제소 연동: Supabase 영구 차단 캐시 ──
+let persistentBanSet: Set<string> = new Set();
+let persistentBanCacheTs = 0;
+const PERSISTENT_BAN_TTL = 5 * 60 * 1000; // 5분
+
+async function refreshPersistentBans(): Promise<void> {
+  const now = Date.now();
+  if (now - persistentBanCacheTs < PERSISTENT_BAN_TTL) return;
+  persistentBanCacheTs = now;
+  try {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!url || !key) return;
+    const res = await fetch(`${url}/rest/v1/ip_bans?is_active=eq.true&select=ip`, {
+      headers: { apikey: key, Authorization: `Bearer ${key}` },
+      signal: AbortSignal.timeout(3000),
+    });
+    if (res.ok) {
+      const rows: Array<{ ip: string }> = await res.json();
+      persistentBanSet = new Set(rows.map(r => r.ip));
+    }
+  } catch { /* 캐시 유지 */ }
+}
+
+function isPersistentlyBanned(ip: string): boolean {
+  return persistentBanSet.has(ip);
+}
+
 // ══════════════════════════════════════════════════════════════
 // ⑧ 에스컬레이션 + 알림
 // ══════════════════════════════════════════════════════════════
@@ -576,10 +604,24 @@ export async function middleware(request: NextRequest, event?: NextFetchEvent) {
     return NextResponse.redirect(httpsUrl, 301);
   }
 
+  // ━━━ Discord 관제소 영구 차단 캐시 갱신 (5분 TTL) ━━━
+  await refreshPersistentBans();
+
   // 화이트리스트 대상은 보안 함정을 전부 건너뜀
   if (!whitelisted) {
 
-    // ① 이미 차단된 IP
+    // ⓪-b Discord 관제소 영구 차단
+    if (isPersistentlyBanned(clientIp)) {
+      event?.waitUntil(sendSecurityAlert({
+        title: '🔒 영구 차단 IP 접근 시도',
+        severity: 'warn',
+        message: 'Discord 관제소에서 영구 차단된 IP가 접근을 시도했습니다.',
+        fields: { IP: clientIp, Layer: '관제소 영구 차단', Path: pathname.slice(0, 100), UA: ua.slice(0, 100) },
+      }));
+      return new NextResponse(null, { status: 403 });
+    }
+
+    // ① 이미 차단된 IP (인메모리 24h)
     if (isIpBanned(clientIp)) {
       event?.waitUntil(sendSecurityAlert({
         title: '1층 차단 IP 재접속 시도',
