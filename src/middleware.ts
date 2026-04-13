@@ -581,6 +581,12 @@ export async function middleware(request: NextRequest, event?: NextFetchEvent) {
 
     // ① 이미 차단된 IP
     if (isIpBanned(clientIp)) {
+      event?.waitUntil(sendSecurityAlert({
+        title: '1층 차단 IP 재접속 시도',
+        severity: 'warn',
+        message: '이미 차단된 IP에서 재접속을 시도했습니다.',
+        fields: { IP: clientIp, Layer: '1층 — 차단 IP', Path: pathname.slice(0, 100), UA: ua.slice(0, 100) },
+      }));
       return new NextResponse(null, { status: 403 });
     }
 
@@ -596,11 +602,18 @@ export async function middleware(request: NextRequest, event?: NextFetchEvent) {
         ua: request.headers.get('user-agent') || undefined,
         message: '경로 인젝션 공격이 감지되어 IP가 차단되었습니다.',
       });
-      if (event) event.waitUntil(sendSecurityAlert({
+      event?.waitUntil(sendSecurityAlert({
         title: '2층 경로 순회/널 바이트 공격',
         severity: 'error',
         message: '경로 인젝션 공격이 감지되어 IP가 차단되었습니다.',
-        fields: { IP: clientIp, Pattern: hasPathTraversal(pathname) ? 'Path Traversal' : 'Null Byte', UA: ua },
+        fields: {
+          IP: clientIp,
+          Layer: '2층 — Path Traversal / Null Byte',
+          Path: pathname.slice(0, 100),
+          Pattern: hasPathTraversal(pathname) ? 'Path Traversal' : 'Null Byte',
+          UA: ua.slice(0, 100),
+          Status: '24시간 차단',
+        },
       }));
       return new NextResponse(null, { status: 400 });
     }
@@ -623,6 +636,19 @@ export async function middleware(request: NextRequest, event?: NextFetchEvent) {
           ua: request.headers.get('user-agent') || undefined,
           message: `동일 IP에서 ${hitCount}개 허니팟 경로에 연속 접근했습니다. 자동 스캐너로 판단, 24시간 차단.`,
         });
+        event?.waitUntil(sendSecurityAlert({
+          title: '3층 허니팟 연쇄 히트 — IP 차단',
+          severity: 'critical',
+          message: `자동 스캐너 탐지. 동일 IP에서 허니팟 ${hitCount}개 연속 접근, 24시간 차단.`,
+          fields: {
+            IP: clientIp,
+            Layer: '3층 — 허니팟 연쇄 (스캐너)',
+            Path: pathname.slice(0, 100),
+            Pattern: (trapData?.paths ?? []).slice(0, 3).join(' → ') || pathname,
+            HitCount: `${hitCount}회 연속`,
+            Status: '24시간 차단',
+          },
+        }));
       } else {
         sendTrapNetAlert({
           title: '허니팟 트랩 발동',
@@ -633,6 +659,19 @@ export async function middleware(request: NextRequest, event?: NextFetchEvent) {
           ua: request.headers.get('user-agent') || undefined,
           message: `TrapNet이 공격자를 ${hitCount}번째로 포착했습니다.`,
         });
+        event?.waitUntil(sendSecurityAlert({
+          title: isAdvancedHoneypot(pathname) ? '3층 고급 허니팟 트랩 발동' : '3층 허니팟 트랩 발동',
+          severity: 'error',
+          message: `TrapNet이 공격자를 포착했습니다. (${hitCount}번째)`,
+          fields: {
+            IP: clientIp,
+            Layer: isAdvancedHoneypot(pathname) ? '3층 — 고급 허니팟 (가짜 응답)' : '3층 — 허니팟',
+            Path: pathname.slice(0, 100),
+            HitCount: `${hitCount}번째 히트`,
+            UA: ua.slice(0, 100),
+            Status: '24시간 차단',
+          },
+        }));
       }
 
       if (isAdvancedHoneypot(pathname)) return buildFakeTrapResponse(pathname);
@@ -653,6 +692,19 @@ export async function middleware(request: NextRequest, event?: NextFetchEvent) {
         ua: request.headers.get('user-agent') || undefined,
         message: 'URL에서 SQL injection / XSS / SSRF 패턴이 감지되었습니다.',
       });
+      event?.waitUntil(sendSecurityAlert({
+        title: '3-b층 URL 공격 페이로드 탐지',
+        severity: 'error',
+        message: 'URL에서 SQL Injection / XSS / SSRF 패턴이 감지되었습니다.',
+        fields: {
+          IP: clientIp,
+          Layer: '3-b층 — 공격 페이로드',
+          Path: fullUrl.slice(0, 100),
+          Pattern: 'SQL Injection / XSS / SSRF',
+          UA: ua.slice(0, 100),
+          Status: escalation === 'ban' ? '24시간 차단' : '요청 차단',
+        },
+      }));
       if (escalation === 'ban') return new NextResponse(null, { status: 403 });
       return NextResponse.json({ error: '요청이 거부되었습니다.' }, { status: 400 });
     }
@@ -692,11 +744,18 @@ export async function middleware(request: NextRequest, event?: NextFetchEvent) {
         ua: ua.slice(0, 100),
         message: '공격 도구 User-Agent가 감지되어 차단되었습니다.',
       });
-      if (event) event.waitUntil(sendSecurityAlert({
+      event?.waitUntil(sendSecurityAlert({
         title: '4층 악성 User-Agent 차단',
         severity: 'warn',
         message: '공격 도구 User-Agent가 감지되어 차단되었습니다.',
-        fields: { IP: clientIp, Pattern: 'Malicious UA', UA: ua.slice(0, 100) },
+        fields: {
+          IP: clientIp,
+          Layer: '4층 — 악성 UA',
+          Path: pathname.slice(0, 100),
+          Pattern: 'Malicious User-Agent',
+          UA: ua.slice(0, 100),
+          Status: '24시간 차단',
+        },
       }));
       return NextResponse.json({ error: '요청이 거부되었습니다.' }, { status: 403 });
     }
@@ -712,6 +771,19 @@ export async function middleware(request: NextRequest, event?: NextFetchEvent) {
         ua: request.headers.get('user-agent') || undefined,
         message: '2초 내 15회 이상의 버스트 요청이 감지되었습니다.',
       });
+      event?.waitUntil(sendSecurityAlert({
+        title: '5층 버스트 요청 탐지',
+        severity: 'warn',
+        message: '2초 내 15회 이상의 비정상 버스트 요청이 감지되었습니다.',
+        fields: {
+          IP: clientIp,
+          Layer: '5층 — 버스트 탐지',
+          Path: pathname.slice(0, 100),
+          Pattern: '15+ req / 2s',
+          UA: ua.slice(0, 100),
+          Status: '요청 차단 (429)',
+        },
+      }));
       return NextResponse.json({ error: '요청 속도가 너무 빠릅니다.' }, { status: 429 });
     }
 
@@ -729,6 +801,19 @@ export async function middleware(request: NextRequest, event?: NextFetchEvent) {
         ua: request.headers.get('user-agent') || undefined,
         message: `공격 도구 특성 헤더가 ${suspCount}개 감지되었습니다.`,
       });
+      event?.waitUntil(sendSecurityAlert({
+        title: '6층 의심스러운 헤더 탐지',
+        severity: 'warn',
+        message: `공격 도구 특성 우회 헤더가 ${suspCount}개 감지되었습니다.`,
+        fields: {
+          IP: clientIp,
+          Layer: '6층 — 의심 헤더',
+          Path: pathname.slice(0, 100),
+          Pattern: `Bypass Headers ×${suspCount}`,
+          UA: ua.slice(0, 100),
+          Status: '알림 기록',
+        },
+      }));
     }
     }
 
@@ -767,9 +852,35 @@ export async function middleware(request: NextRequest, event?: NextFetchEvent) {
   // ━━━ Rate Limit (화이트리스트도 적용 — DDoS 방어) ━━━
   const rateLimitKey = sessionUserId ? `${clientIp}:${sessionUserId}` : clientIp;
   if (slidingWindowCheck(rateLimitKey)) {
+    event?.waitUntil(sendSecurityAlert({
+      title: '7층 Rate Limit 초과',
+      severity: 'warn',
+      message: '60초 내 80회 이상의 과도한 요청이 감지되었습니다.',
+      fields: {
+        IP: clientIp,
+        Layer: '7층 — Rate Limit',
+        Path: pathname.slice(0, 100),
+        Pattern: '80+ req / 60s',
+        UA: ua.slice(0, 100),
+        Status: '요청 차단 (429)',
+      },
+    }));
     return NextResponse.json({ error: '비정상적인 요청 패턴이 감지되었습니다.' }, { status: 429 });
   }
   if (isIPAbusive(clientIp)) {
+    event?.waitUntil(sendSecurityAlert({
+      title: '7층 IP 남용 탐지',
+      severity: 'warn',
+      message: '장기 누적 요청 패턴이 비정상으로 판단되어 차단되었습니다.',
+      fields: {
+        IP: clientIp,
+        Layer: '7층 — IP 남용',
+        Path: pathname.slice(0, 100),
+        Pattern: 'IP Abuse (장기 누적)',
+        UA: ua.slice(0, 100),
+        Status: '요청 차단 (429)',
+      },
+    }));
     return NextResponse.json({ error: '비정상적인 요청 패턴이 감지되었습니다.' }, { status: 429 });
   }
 
@@ -798,10 +909,19 @@ export async function middleware(request: NextRequest, event?: NextFetchEvent) {
         if (!csrfCookie || !csrfHeader) {
           if (!whitelisted) {
             recordTrapHit(clientIp, `CSRF_MISSING:${pathname}`);
-            edgeSecurityAlert('CSRF 토큰 누락', 'Cross-origin 요청에서 CSRF 토큰이 누락되었습니다.', 'warn', {
-              IP: clientIp, Path: pathname, Method: request.method,
-              Origin: origin || 'none', Referer: (referer || 'none').slice(0, 200),
-            });
+            event?.waitUntil(sendSecurityAlert({
+              title: '8층 CSRF 토큰 누락',
+              severity: 'warn',
+              message: 'Cross-origin 요청에서 CSRF 토큰이 누락되었습니다.',
+              fields: {
+                IP: clientIp,
+                Layer: '8층 — CSRF 토큰 누락',
+                Path: pathname.slice(0, 100),
+                Method: request.method,
+                Origin: (origin || 'none').slice(0, 100),
+                Referer: (referer || 'none').slice(0, 100),
+              },
+            }));
           }
           return NextResponse.json({ error: '요청이 유효하지 않습니다.' }, { status: 403 });
         }
@@ -815,9 +935,19 @@ export async function middleware(request: NextRequest, event?: NextFetchEvent) {
         if (mismatch !== 0) {
           if (!whitelisted) {
             recordTrapHit(clientIp, `CSRF_MISMATCH:${pathname}`);
-            edgeSecurityAlert('CSRF 토큰 불일치', 'Cross-origin 요청에서 CSRF 토큰 불일치가 감지되었습니다.', 'error', {
-              IP: clientIp, Path: pathname, Method: request.method,
-            });
+            event?.waitUntil(sendSecurityAlert({
+              title: '8층 CSRF 토큰 불일치',
+              severity: 'error',
+              message: 'Cross-origin 요청에서 CSRF 토큰 불일치가 감지되었습니다. 위조 요청으로 판단합니다.',
+              fields: {
+                IP: clientIp,
+                Layer: '8층 — CSRF 토큰 불일치',
+                Path: pathname.slice(0, 100),
+                Method: request.method,
+                Origin: (origin || 'none').slice(0, 100),
+                Status: '요청 차단 (403)',
+              },
+            }));
           }
           return NextResponse.json({ error: '요청이 유효하지 않습니다.' }, { status: 403 });
         }

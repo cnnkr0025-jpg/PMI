@@ -92,10 +92,23 @@ async function sendDiscordAlert(payload: AlertPayload): Promise<void> {
 
   const fields: Array<{ name: string; value: string; inline: boolean }> = [];
 
+  const FIELD_LABELS: Record<string, string> = {
+    'IP':        '🕵️ 공격자 IP',
+    'Layer':     '🏰 탐지 층',
+    'Path':      '📍 요청 경로',
+    'Pattern':   '🔍 공격 패턴',
+    'UA':        '🌐 User-Agent',
+    'Method':    '⚡ HTTP 메서드',
+    'Origin':    '🌍 Origin',
+    'Referer':   '🔗 Referer',
+    'HitCount':  '🔢 누적 히트',
+    'Status':    '🚦 차단 상태',
+  };
+
   if (payload.fields) {
     for (const [name, value] of Object.entries(payload.fields)) {
       fields.push({
-        name: name === 'IP' ? '🕵️ 공격자 IP' : name,
+        name: FIELD_LABELS[name] ?? name,
         value: value.length > 900 ? value.slice(0, 897) + '...' : value,
         inline: true,
       });
