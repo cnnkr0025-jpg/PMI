@@ -5,6 +5,9 @@ import { RateLimiter, getClientIp } from '@/lib/rateLimit';
 import { verifySession } from '@/lib/apiAuth';
 import { apiKeyManager, parseRateLimitError } from '@/lib/apiKeyRotation';
 import { fetchWithRetry } from '@/utils/fetchWithRetry';
+import { appendLedgerEvent } from '@/lib/wallet/ledger';
+import { isShadowedAny, getShadowSeedForUser } from '@/lib/security/shadowContext';
+import { generateSyntheticAiResponse, getSyntheticResponseDelay } from '@/lib/security/shadowDataset';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -61,49 +64,53 @@ function getServerDb() {
   return createClient(supabaseUrl, supabaseServiceKey);
 }
 
-// 원자적 크레딧 차감 — DB RPC(SELECT FOR UPDATE) 사용으로 동시 요청 이중 차감 방지
+// Append-only Ledger 기반 크레딧 차감 (wallet_ledger reserve)
 async function consumeChatCredit(userId: string, modelId: string): Promise<boolean> {
-  const db = getServerDb();
-  const { data, error } = await db.rpc('consume_credit_atomic', {
-    p_user_id: userId,
-    p_model_id: modelId,
-    p_amount: 1,
+  const key = `chat-use-${modelId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const result = await appendLedgerEvent({
+    userId,
+    eventType: 'reserve',
+    delta: -1,
+    idempotencyKey: key,
+    metadata: { modelId, action: 'chat_credit_consume' },
   });
-  if (error) throw new Error('[ERR_CREDIT_01] Failed to consume credit.');
-  return data === true;
+  return result.success;
 }
 
-// 원자적 크레딧 환불 — 오류 보상 시 사용
+// Append-only Ledger 기반 크레딧 환불 (오류 보상)
 async function refundChatCredit(userId: string, modelId: string): Promise<void> {
-  const db = getServerDb();
-  await db.rpc('refund_credit_atomic', {
-    p_user_id: userId,
-    p_model_id: modelId,
-    p_amount: 1,
-    p_reason: 'AI 오류 보상 환불',
+  const key = `chat-refund-${modelId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  await appendLedgerEvent({
+    userId,
+    eventType: 'cancel',
+    delta: 1,
+    idempotencyKey: key,
+    metadata: { modelId, action: 'chat_credit_refund' },
   });
 }
 
-// 영상 모델: 초 단위 원자 차감
+// 영상 모델: 초 단위 Ledger 차감
 async function consumeVideoCredits(userId: string, modelId: string, seconds: number): Promise<boolean> {
-  const db = getServerDb();
-  const { data, error } = await db.rpc('consume_credit_atomic', {
-    p_user_id: userId,
-    p_model_id: modelId,
-    p_amount: seconds,
+  const key = `video-use-${modelId}-${seconds}s-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const result = await appendLedgerEvent({
+    userId,
+    eventType: 'reserve',
+    delta: -seconds,
+    idempotencyKey: key,
+    metadata: { modelId, action: 'video_credit_consume', seconds },
   });
-  if (error) throw new Error('[ERR_CREDIT_01] Failed to consume video credit.');
-  return data === true;
+  return result.success;
 }
 
-// 영상 모델: 초 단위 원자 환불
+// 영상 모델: 초 단위 Ledger 환불
 async function refundVideoCredits(userId: string, modelId: string, seconds: number): Promise<void> {
-  const db = getServerDb();
-  await db.rpc('refund_credit_atomic', {
-    p_user_id: userId,
-    p_model_id: modelId,
-    p_amount: seconds,
-    p_reason: `영상 생성 오류 환불 (${seconds}초)`,
+  const key = `video-refund-${modelId}-${seconds}s-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  await appendLedgerEvent({
+    userId,
+    eventType: 'cancel',
+    delta: seconds,
+    idempotencyKey: key,
+    metadata: { modelId, action: 'video_credit_refund', seconds },
   });
 }
 
@@ -1386,6 +1393,19 @@ Example style:
         snippet: lastContent.slice(0, 200),
         ip: getClientIp(request),
       });
+    }
+
+    // ── Layer 20: Shadow 모드 분기 ─────────────────────────────
+    // 실제 AI 호출 및 크레딧 차감 없이 합성 응답 반환.
+    // isShadowedAny는 인메모리 기반 (단일 인스턴스 신뢰 가능).
+    if (isShadowedAny(session.userId)) {
+      const shadowSeed = getShadowSeedForUser(session.userId);
+      const lastMsg = findLastMessageByRole(messages, 'user');
+      const userText = typeof lastMsg?.content === 'string' ? lastMsg.content : '';
+      const syntheticReply = generateSyntheticAiResponse(shadowSeed, userText);
+      const delayMs = Math.min(getSyntheticResponseDelay(shadowSeed), 1500);
+      await new Promise<void>(resolve => setTimeout(resolve, delayMs));
+      return new Response(buildPseudoStream(syntheticReply), { headers: PSEUDO_STREAM_HEADERS });
     }
 
     // 영상 모델: 보유 초 검증 후 초 단위 차감 (일반 모델보다 먼저 처리)

@@ -2,6 +2,12 @@ import { NextResponse } from 'next/server';
 import type { NextRequest, NextFetchEvent } from 'next/server';
 import { jwtVerify, importSPKI } from 'jose';
 import { sendTrapNetAlert, sendSecurityAlert } from '@/lib/alerting';
+import { reportLayer, evaluate } from '@/lib/security/riskEngine';
+import type { RiskContext } from '@/lib/security/riskTypes';
+import { isShadowed } from '@/lib/security/shadowContext';
+import { recordRequestTiming, analyzeJitter } from '@/lib/security/jitterAnalyzer';
+import { securityAudit, generateCorrelationId, buildSecurityAuditFromRisk } from '@/lib/auditLog';
+import { checkWriteGate } from '@/lib/security/freezeGate';
 
 // ══════════════════════════════════════════════════════════════
 // ① 화이트리스트 시스템 — 모든 보안 검사보다 선행
@@ -284,6 +290,7 @@ function getClientIp(request: NextRequest): string {
 function stripServerHeaders(response: NextResponse): NextResponse {
   response.headers.delete('X-Powered-By');
   response.headers.delete('Server');
+  response.headers.delete('x-internal-shadow'); // 만약 실수로 set됐더라도 클라이언트 미노출
   return response;
 }
 
@@ -928,6 +935,7 @@ export async function middleware(request: NextRequest, event?: NextFetchEvent) {
 
   // ━━━ CSRF ━━━
   const requestHeaders = new Headers(request.headers);
+  requestHeaders.delete('x-internal-shadow'); // 클라이언트 위조 차단
   const existingCsrfToken = request.cookies.get('csrf-token')?.value;
   const csrfTokenForThisRequest = existingCsrfToken || generateCsrfToken();
   requestHeaders.set('x-middleware-csrf-token', csrfTokenForThisRequest);
@@ -1004,6 +1012,116 @@ export async function middleware(request: NextRequest, event?: NextFetchEvent) {
       sameSite: 'strict',
       maxAge: 60 * 60 * 24,
     });
+  }
+
+  // ━━━ Production-Grade: 리스크 엔진 종합 평가 ━━━
+  if (!whitelisted && isApiPath) {
+    const riskCtx: RiskContext = {
+      ip: clientIp,
+      userAgent: ua,
+      userId: sessionUserId,
+      sessionId: request.cookies.get('session')?.value,
+      pathname,
+      method: request.method,
+      isAuthenticated: !!sessionUserId,
+    };
+
+    // Layer 18: Jitter 분석 (API 요청 타이밍 기록)
+    const jitterKey = sessionUserId ? `jitter:${sessionUserId}` : `jitter:${clientIp}`;
+    recordRequestTiming(jitterKey);
+    const jitterResult = analyzeJitter(jitterKey);
+    if (jitterResult.suspicious) {
+      reportLayer(riskCtx, 18, 'JITTER_BOT_PATTERN', 5, 'session_risk', 'automation', 'soft', {
+        detail: `CV=${jitterResult.coefficientOfVariation}, avg=${jitterResult.avgInterval}ms`,
+      });
+    }
+
+    // Freeze Gate 체크 (자산 변경 API에서만)
+    if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(request.method)) {
+      const assetPaths = ['/api/wallet', '/api/payments', '/api/chat'];
+      const isAssetPath = assetPaths.some(p => pathname.startsWith(p));
+      if (isAssetPath) {
+        const gate = checkWriteGate();
+        if (!gate.allowed) {
+          return NextResponse.json(
+            { error: 'Service temporarily unavailable. Please try again later.' },
+            { status: 503 },
+          );
+        }
+      }
+    }
+
+    // 종합 리스크 평가
+    const riskResult = evaluate(riskCtx);
+
+    // Observe 이상이면 감사 로그 + Discord 알림 (10-21층)
+    if (riskResult.decision !== 'allow') {
+      const correlationId = generateCorrelationId();
+      const auditEntry = buildSecurityAuditFromRisk(
+        correlationId,
+        riskResult.decision,
+        riskResult.decisionReason,
+        riskResult.totalScore,
+        riskResult.activeSignals,
+        riskResult.scopeScores,
+        {
+          userId: sessionUserId,
+          sessionId: request.cookies.get('session')?.value,
+          ip: clientIp,
+          userAgent: ua,
+          method: request.method,
+          path: pathname,
+        },
+      );
+      securityAudit(auditEntry);
+
+      // 10-21층 Discord 알림 — 각 decision별 레벨 매핑
+      const triggeredLayers = riskResult.activeSignals.map(s => s.layer);
+      const layerRange = triggeredLayers.length > 0
+        ? `${Math.min(...triggeredLayers)}-${Math.max(...triggeredLayers)}`
+        : '10-21';
+
+      let alertTitle: string;
+      let alertSeverity: 'warn' | 'error' | 'critical';
+
+      switch (riskResult.decision) {
+        case 'shadow':
+          alertTitle = `🔥 ${layerRange}층 → Shadow 격리`;
+          alertSeverity = 'critical';
+          break;
+        case 'challenge':
+          alertTitle = `🛡️ ${layerRange}층 → Challenge 발동`;
+          alertSeverity = 'error';
+          break;
+        case 'observe':
+          alertTitle = `👁️ ${layerRange}층 → Observe 모니터링`;
+          alertSeverity = 'warn';
+          break;
+        default:
+          alertTitle = `⚠️ ${layerRange}층 → ${riskResult.decision}`;
+          alertSeverity = 'warn';
+      }
+
+      event?.waitUntil(sendSecurityAlert({
+        title: alertTitle,
+        severity: alertSeverity,
+        message: `다차원 리스크 엔진 판단: ${riskResult.decision} ` +
+                 `(점수: ${riskResult.totalScore}, 사유: ${riskResult.decisionReason})`,
+        fields: {
+          IP: clientIp,
+          Layer: `${layerRange}층 — 다차원 리스크`,
+          Path: pathname.slice(0, 100),
+          Decision: riskResult.decision,
+          Score: String(riskResult.totalScore),
+          Reason: riskResult.decisionReason.slice(0, 200),
+          UserID: sessionUserId || 'anonymous',
+          UA: ua.slice(0, 100),
+        },
+      }));
+    }
+
+    // Shadow 상태: response.headers는 route handler에 전달되지 않아 제거.
+    // route handler에서는 isShadowedAny(userId) 직접 호출로 확인.
   }
 
   return stripServerHeaders(response);
