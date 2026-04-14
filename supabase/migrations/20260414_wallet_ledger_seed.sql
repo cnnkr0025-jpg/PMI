@@ -106,10 +106,9 @@ BEGIN
   GET DIAGNOSTICS v_count = ROW_COUNT;
   RAISE NOTICE '[wallet_ledger_seed] 완료: % 행 삽입 (중복 건너뜀 포함)', v_count;
 
-  -- RULE 재생성 (append-only 보안 복원)
+  -- RULE 재생성 (append-only 보안 복원: UPDATE/DELETE만 차단, INSERT는 허용해야 서비스 정상 작동)
   CREATE RULE no_update_wallet_ledger AS ON UPDATE TO wallet_ledger DO INSTEAD NOTHING;
   CREATE RULE no_delete_wallet_ledger AS ON DELETE TO wallet_ledger DO INSTEAD NOTHING;
-  CREATE RULE ledger_modify_deny AS ON INSERT TO wallet_ledger DO INSTEAD NOTHING;
 
 END;
 $$;

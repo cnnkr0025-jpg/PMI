@@ -208,6 +208,19 @@ export const Header = React.memo(() => {
               </>
             ) : (
               <>
+                <Link
+                  href="/guide"
+                  prefetch
+                  className={`px-3 py-2 rounded-lg text-sm transition-colors ${pathname === '/guide' ? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white font-medium' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white'}`}
+                >가이드</Link>
+                <Link
+                  href="/security"
+                  className={`p-2 rounded-lg transition-colors ${pathname === '/security' ? 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white'}`}
+                  title="보안 정책"
+                >
+                  <ShieldCheck className="w-5 h-5" />
+                </Link>
+                <div className="w-px h-6 bg-gray-200 dark:bg-gray-700 mx-2" />
                 <Link href="/login" className="px-4 py-2 text-sm text-gray-700 hover:text-gray-900 transition-colors">로그인</Link>
                 <Link href="/login" className="px-4 py-2 bg-primary text-primary-foreground text-sm rounded-lg hover:opacity-90 transition-all">회원가입</Link>
               </>

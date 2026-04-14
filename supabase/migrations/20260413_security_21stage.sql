@@ -128,9 +128,8 @@ ALTER TABLE wallet_ledger ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS ledger_select_own ON wallet_ledger;
 CREATE POLICY ledger_select_own ON wallet_ledger
   FOR SELECT USING (auth.uid()::text = user_id);
-DROP POLICY IF EXISTS ledger_modify_deny ON wallet_ledger;
-CREATE POLICY ledger_modify_deny ON wallet_ledger
-  FOR INSERT WITH CHECK (false);  -- service_role만 INSERT 가능
+-- ledger INSERT는 service_role이 RLS 우회하므로 별도 POLICY 불필요
+-- (WITH CHECK (false)는 service_role도 차단하므로 제거)
 
 -- ── 4. RPC: 총량 검증용 함수 ────────────────────────────────
 

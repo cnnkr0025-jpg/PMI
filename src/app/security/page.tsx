@@ -1,6 +1,7 @@
 import { Shield, Lock, EyeOff, Server, KeyRound, ShieldAlert, Timer, Database, ArrowLeft, Users, Code2, FileKey, HardDrive, Smartphone } from 'lucide-react';
 import Link from 'next/link';
 import { InquiryForm } from '@/components/InquiryForm';
+import { cookies } from 'next/headers';
 
 export const metadata = {
   title: '보안 | Pick-My-AI',
@@ -101,7 +102,10 @@ const faqItems = [
   },
 ];
 
-export default function SecurityPage() {
+export default async function SecurityPage() {
+  const cookieStore = await cookies();
+  const hasSession = Boolean(cookieStore.get('session')?.value);
+
   return (
     <div className="min-h-screen bg-white">
       <div className="border-b border-gray-100 sticky top-0 z-10 bg-white">
@@ -200,7 +204,19 @@ export default function SecurityPage() {
               스크린샷을 첨부하면 더 빠른 처리가 가능합니다.
             </p>
           </div>
-          <InquiryForm />
+          {hasSession ? (
+            <InquiryForm />
+          ) : (
+            <div className="border border-gray-200 rounded-xl p-6 text-center space-y-3">
+              <p className="text-sm text-gray-600">문의를 제출하시려면 로그인이 필요합니다.</p>
+              <Link
+                href="/login"
+                className="inline-flex items-center px-4 py-2 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-700 transition-colors"
+              >
+                로그인하기
+              </Link>
+            </div>
+          )}
         </section>
 
         {/* 개인정보처리방침 링크 */}
