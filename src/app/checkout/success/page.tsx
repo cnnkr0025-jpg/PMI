@@ -15,6 +15,49 @@ export default function CheckoutSuccessPage() {
   const { clearSelections, currentUser } = useStore();
 
   useEffect(() => {
+    const MAX_RETRIES = 3;
+    const RETRY_DELAY_MS = 2000;
+
+    const confirmPayment = async (paymentKey: string, orderId: string, amount: number, orderToken: string, isMockPayment: boolean, attempt: number): Promise<boolean> => {
+      try {
+        const res = await csrfFetch('/api/payments/toss/confirm', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ paymentKey, orderId, amount, orderToken, isMockPayment })
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err?.reason || err?.error || '결제 확인에 실패했습니다.');
+        }
+
+        const result = await res.json();
+        const currentState = useStore.getState();
+        useStore.setState({
+          wallet: currentState.currentUser ? {
+            userId: currentState.currentUser.id,
+            credits: result.walletCredits || {},
+            transactions: currentState.wallet?.transactions || [],
+          } : currentState.wallet,
+          pmcBalance: result.settings?.pmcBalance || currentState.pmcBalance,
+        });
+
+        localStorage.removeItem('pending_purchase');
+        toast.success('결제가 완료되었습니다. 크레딧이 안전하게 지급되었습니다.');
+        return true;
+      } catch (e) {
+        if (attempt < MAX_RETRIES) {
+          toast.loading(`크레딧 반영 재시도 중... (${attempt + 1}/${MAX_RETRIES})`, { duration: RETRY_DELAY_MS });
+          await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
+          return confirmPayment(paymentKey, orderId, amount, orderToken, isMockPayment, attempt + 1);
+        }
+        toast.error(
+          `${(e as Error)?.message || '결제 확인 중 오류가 발생했습니다.'} 문제가 지속되면 고객센터에 문의해 주세요. (주문번호: ${orderId})`,
+          { duration: 10000 }
+        );
+        return false;
+      }
+    };
+
     const run = async () => {
       const paymentKey = params.get('paymentKey');
       const amount = params.get('amount');
@@ -24,33 +67,7 @@ export default function CheckoutSuccessPage() {
       const pendingOrder = raw ? JSON.parse(raw) as { orderId?: string; orderToken?: string } : null;
 
       if (paymentKey && amount && orderId && pendingOrder?.orderId === orderId && pendingOrder.orderToken) {
-        try {
-          const res = await csrfFetch('/api/payments/toss/confirm', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ paymentKey, orderId, amount: Number(amount), orderToken: pendingOrder.orderToken, isMockPayment })
-          });
-          if (!res.ok) {
-            const err = await res.json();
-            throw new Error(err?.reason || err?.error || '결제 확인에 실패했습니다.');
-          }
-
-          const result = await res.json();
-          const currentState = useStore.getState();
-          useStore.setState({
-            wallet: currentState.currentUser ? {
-              userId: currentState.currentUser.id,
-              credits: result.walletCredits || {},
-              transactions: currentState.wallet?.transactions || [],
-            } : currentState.wallet,
-            pmcBalance: result.settings?.pmcBalance || currentState.pmcBalance,
-          });
-
-          localStorage.removeItem('pending_purchase');
-          toast.success('결제가 완료되었습니다. 크레딧이 안전하게 지급되었습니다.');
-        } catch (e) {
-          toast.error((e as Error)?.message || '결제 확인 중 오류가 발생했습니다.');
-        }
+        await confirmPayment(paymentKey, orderId, Number(amount), pendingOrder.orderToken, isMockPayment, 1);
       } else {
         toast.error('검증 가능한 결제 정보가 없습니다.');
       }

@@ -15,7 +15,7 @@ type JWTKey = Awaited<ReturnType<typeof importPKCS8>>;
  */
 
 // ── 상수 ──
-const ACCESS_TOKEN_EXPIRY = '30d';
+const ACCESS_TOKEN_EXPIRY = '1h';
 const REFRESH_TOKEN_EXPIRY = '7d';
 const MAX_SESSIONS_PER_USER = 5;
 const JWT_ISSUER = 'pick-my-ai';
@@ -119,7 +119,7 @@ function getHs256Key(): Uint8Array | null {
   return new TextEncoder().encode(secret);
 }
 
-function useRs256(): boolean {
+function isRs256Available(): boolean {
   return !!(process.env.JWT_RSA_PRIVATE_KEY && process.env.JWT_RSA_PUBLIC_KEY);
 }
 
@@ -203,7 +203,7 @@ export async function createAccessToken(payload: {
   const jti = crypto.randomBytes(16).toString('hex');
   const rsaKey = await getRsaPrivateKey();
 
-  if (rsaKey && useRs256()) {
+  if (rsaKey && isRs256Available()) {
     return new SignJWT({ ...payload, jti, tokenType: 'access' })
       .setProtectedHeader({ alg: 'RS256', typ: 'JWT' })
       .setIssuedAt()
@@ -243,7 +243,7 @@ export async function createRefreshToken(payload: {
   const rsaKey = await getRsaPrivateKey();
 
   let token: string;
-  if (rsaKey && useRs256()) {
+  if (rsaKey && isRs256Available()) {
     token = await new SignJWT({ ...payload, jti, tokenType: 'refresh', familyId })
       .setProtectedHeader({ alg: 'RS256', typ: 'JWT' })
       .setIssuedAt()
@@ -323,7 +323,7 @@ export async function verifySecureToken(token: string): Promise<{
   expired?: boolean;
 }> {
   const rsaPubKey = await getRsaPublicKey();
-  if (rsaPubKey && useRs256()) {
+  if (rsaPubKey && isRs256Available()) {
     return tryVerifyToken(token, rsaPubKey, 'RS256');
   }
 

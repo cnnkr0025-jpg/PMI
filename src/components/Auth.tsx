@@ -16,10 +16,15 @@ interface AuthProps {
 export const Auth: React.FC<AuthProps> = ({ onSuccess, defaultMode = 'login' }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [agreedToPrivacy, setAgreedToPrivacy] = useState(false);
+  const [confirmedAge, setConfirmedAge] = useState(false);
+  const [agreedToMarketing, setAgreedToMarketing] = useState(false);
+
+  const allRequired = agreedToTerms && agreedToPrivacy && confirmedAge;
 
   const handleGoogleLogin = useCallback(async () => {
-    if (!agreedToTerms) {
-      toast.error('이용약관 및 개인정보처리방침에 동의해주세요.');
+    if (!allRequired) {
+      toast.error('필수 항목에 모두 동의해주세요.');
       return;
     }
 
@@ -76,7 +81,7 @@ export const Auth: React.FC<AuthProps> = ({ onSuccess, defaultMode = 'login' }) 
       }
       setIsLoading(false);
     }
-  }, [agreedToTerms]);
+  }, [allRequired]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-50 via-purple-50 to-pink-50 relative">
@@ -125,7 +130,7 @@ export const Auth: React.FC<AuthProps> = ({ onSuccess, defaultMode = 'login' }) 
               size="lg"
               className="w-full flex items-center justify-center space-x-3 border-gray-300 hover:bg-gray-50 transition-all py-3"
               onClick={handleGoogleLogin}
-              disabled={isLoading || !agreedToTerms}
+              disabled={isLoading || !allRequired}
             >
               {isLoading ? (
                 <span className="flex items-center justify-center space-x-2">
@@ -145,8 +150,26 @@ export const Auth: React.FC<AuthProps> = ({ onSuccess, defaultMode = 'login' }) 
               )}
             </Button>
 
-            {/* 이용약관 동의 체크박스 */}
-            <div className="mt-6">
+            {/* 약관 동의 체크박스 (분리) */}
+            <div className="mt-6 space-y-3">
+              {/* 전체 동의 */}
+              <label className="flex items-start space-x-3 cursor-pointer group border-b border-gray-200 pb-3">
+                <input
+                  type="checkbox"
+                  checked={allRequired && agreedToMarketing}
+                  onChange={(e) => {
+                    const v = e.target.checked;
+                    setAgreedToTerms(v);
+                    setAgreedToPrivacy(v);
+                    setConfirmedAge(v);
+                    setAgreedToMarketing(v);
+                  }}
+                  className="mt-0.5 w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 cursor-pointer"
+                />
+                <span className="text-sm font-semibold text-gray-700">전체 동의</span>
+              </label>
+
+              {/* 이용약관 (필수) */}
               <label className="flex items-start space-x-3 cursor-pointer group">
                 <input
                   type="checkbox"
@@ -154,32 +177,55 @@ export const Auth: React.FC<AuthProps> = ({ onSuccess, defaultMode = 'login' }) 
                   onChange={(e) => setAgreedToTerms(e.target.checked)}
                   className="mt-0.5 w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 cursor-pointer"
                 />
-                <span className="text-sm text-gray-600 leading-relaxed">
-                  <a
-                    href="/terms"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-600 hover:text-blue-700 hover:underline font-medium"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    이용약관
-                  </a>
-                  {' '}및{' '}
-                  <a
-                    href="/privacy"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-600 hover:text-blue-700 hover:underline font-medium"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    개인정보처리방침
-                  </a>
-                  에 동의합니다.
+                <span className="text-sm text-gray-600">
+                  <span className="text-red-500 font-bold">[필수]</span>{' '}
+                  <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-medium" onClick={(e) => e.stopPropagation()}>이용약관</a>에 동의합니다.
                 </span>
               </label>
-              {!agreedToTerms && (
-                <p className="mt-2 text-xs text-gray-400 ml-7">
-                  서비스 이용을 위해 약관에 동의해주세요.
+
+              {/* 개인정보처리방침 (필수) */}
+              <label className="flex items-start space-x-3 cursor-pointer group">
+                <input
+                  type="checkbox"
+                  checked={agreedToPrivacy}
+                  onChange={(e) => setAgreedToPrivacy(e.target.checked)}
+                  className="mt-0.5 w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 cursor-pointer"
+                />
+                <span className="text-sm text-gray-600">
+                  <span className="text-red-500 font-bold">[필수]</span>{' '}
+                  <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-medium" onClick={(e) => e.stopPropagation()}>개인정보처리방침</a>에 동의합니다.
+                </span>
+              </label>
+
+              {/* 만 14세 이상 확인 (필수) */}
+              <label className="flex items-start space-x-3 cursor-pointer group">
+                <input
+                  type="checkbox"
+                  checked={confirmedAge}
+                  onChange={(e) => setConfirmedAge(e.target.checked)}
+                  className="mt-0.5 w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 cursor-pointer"
+                />
+                <span className="text-sm text-gray-600">
+                  <span className="text-red-500 font-bold">[필수]</span> 만 14세 이상입니다.
+                </span>
+              </label>
+
+              {/* 마케팅 수신 동의 (선택) */}
+              <label className="flex items-start space-x-3 cursor-pointer group">
+                <input
+                  type="checkbox"
+                  checked={agreedToMarketing}
+                  onChange={(e) => setAgreedToMarketing(e.target.checked)}
+                  className="mt-0.5 w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 cursor-pointer"
+                />
+                <span className="text-sm text-gray-600">
+                  <span className="text-gray-400 font-bold">[선택]</span> 마케팅 정보 수신에 동의합니다.
+                </span>
+              </label>
+
+              {!allRequired && (
+                <p className="text-xs text-gray-400 ml-7">
+                  서비스 이용을 위해 필수 항목에 동의해주세요.
                 </p>
               )}
             </div>

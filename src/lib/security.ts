@@ -53,6 +53,7 @@ export function validateApiKey(apiKey: string, provider: string): boolean {
     google: 'AIza',
     perplexity: 'pplx-',
     grok: 'xai-',
+    xai: 'xai-',
   };
   
   const prefix = prefixes[provider];

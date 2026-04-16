@@ -3,18 +3,15 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
-const FALLBACK_URL = 'https://placeholder.supabase.co';
-const FALLBACK_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBsYWNlaG9sZGVyIiwicm9sZSI6ImFub24iLCJpYXQiOjE2MDAwMDAwMDAsImV4cCI6MjAwMDAwMDAwMH0.placeholder';
-
 if (!supabaseUrl || !supabaseAnonKey) {
   if (typeof window === 'undefined') {
-    console.warn('[Supabase] Credentials not found. Supabase features will be unavailable.');
+    console.error('[Supabase] NEXT_PUBLIC_SUPABASE_URL 또는 NEXT_PUBLIC_SUPABASE_ANON_KEY 환경변수가 설정되지 않았습니다.');
   }
 }
 
 export const supabase = createClient(
-  supabaseUrl || FALLBACK_URL,
-  supabaseAnonKey || FALLBACK_KEY,
+  supabaseUrl,
+  supabaseAnonKey,
   {
     auth: {
       persistSession: typeof window !== 'undefined',

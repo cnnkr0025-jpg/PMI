@@ -169,7 +169,7 @@ export const Configurator: React.FC = () => {
                   const handleBuy = () => {
                     if (isPurchased) { toast.info('이미 구매한 상품입니다.'); return; }
                     if (canPayWithPMC) {
-                      usePMC(item.price, `${item.name} 구매`, `other-${Date.now()}`);
+                      useStore.getState().usePMC(item.price, `${item.name} 구매`, `other-${Date.now()}`);
                       if (item.storeKey === 'smartRouterPurchased') setSmartRouterPurchased(true);
                       if (item.storeKey === 'insurancePurchased') setInsurancePurchased(true);
                       toast.success(`✅ ${item.name} 구매 완료! (-${item.price} PMC)`);

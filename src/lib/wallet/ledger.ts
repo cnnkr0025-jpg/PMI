@@ -39,11 +39,11 @@ export async function getBalance(userId: string): Promise<number> {
     .single();
 
   if (!ledgerError && ledgerData) {
-    console.log('[ledger] balance from ledger:', userId, ledgerData.balance_after);
+    if (process.env.NODE_ENV !== 'production') console.log('[ledger] balance from ledger:', userId, ledgerData.balance_after);
     return ledgerData.balance_after;
   }
 
-  console.log('[ledger] ledger not found, falling back to user_wallets:', userId, ledgerError?.message);
+  if (process.env.NODE_ENV !== 'production') console.log('[ledger] ledger not found, falling back to user_wallets:', userId, ledgerError?.message);
 
   // 2. 마이그레이션 미완료 fallback: user_wallets.credits(JSONB) 합계
   const { data: legacyData, error: legacyError } = await db
@@ -55,11 +55,11 @@ export async function getBalance(userId: string): Promise<number> {
   if (legacyData?.credits) {
     const credits = legacyData.credits as Record<string, number>;
     const total = Object.values(credits).reduce((sum, val) => sum + (typeof val === 'number' ? val : 0), 0);
-    console.log('[ledger] balance from user_wallets fallback:', userId, total, credits);
+    if (process.env.NODE_ENV !== 'production') console.log('[ledger] balance from user_wallets fallback:', userId, total, credits);
     return total;
   }
 
-  console.log('[ledger] no balance found in ledger or user_wallets:', userId, legacyError?.message);
+  if (process.env.NODE_ENV !== 'production') console.log('[ledger] no balance found in ledger or user_wallets:', userId, legacyError?.message);
   return 0;
 }
 
@@ -82,7 +82,10 @@ export async function appendLedgerEvent(params: {
 }): Promise<{ success: boolean; entry?: LedgerEntry; error?: string }> {
   const { userId, eventType, delta, idempotencyKey, intentTokenId, metadata, adminApprover } = params;
 
-  console.log('[ledger] appendLedgerEvent called:', { userId, eventType, delta, idempotencyKey });
+  if (process.env.NODE_ENV !== 'production') {
+    const safeKey = String(idempotencyKey).replace(/[\r\n]/g, '_').slice(0, 100);
+    console.log('[ledger] appendLedgerEvent called:', { userId, eventType, delta, idempotencyKey: safeKey });
+  }
 
   // admin mutation 검증
   if ((eventType === 'admin_credit' || eventType === 'admin_debit') && !adminApprover) {
@@ -101,21 +104,21 @@ export async function appendLedgerEvent(params: {
     .single();
 
   if (existing) {
-    console.log('[ledger] idempotent - returning existing entry:', idempotencyKey);
+    if (process.env.NODE_ENV !== 'production') console.log('[ledger] idempotent - returning existing entry for user:', userId);
     return { success: true, entry: existing as LedgerEntry };
   }
 
   // 2. 현재 잔액 조회 (직렬화된 트랜잭션 보장을 위해 FOR UPDATE 시뮬레이션)
   const currentBalance = await getBalance(userId);
-  console.log('[ledger] currentBalance:', currentBalance);
+  if (process.env.NODE_ENV !== 'production') console.log('[ledger] currentBalance:', currentBalance);
 
   // 3. 새 잔액 계산
   const newBalance = currentBalance + delta;
-  console.log('[ledger] newBalance:', newBalance);
+  if (process.env.NODE_ENV !== 'production') console.log('[ledger] newBalance:', newBalance);
 
   // 4. 음수 잔액 방지
   if (newBalance < 0) {
-    console.error('[ledger] INSUFFICIENT BALANCE:', { currentBalance, delta, newBalance });
+    if (process.env.NODE_ENV !== 'production') console.error('[ledger] INSUFFICIENT BALANCE:', { currentBalance, delta, newBalance });
     return { success: false, error: `Insufficient balance: current=${currentBalance}, delta=${delta}` };
   }
 

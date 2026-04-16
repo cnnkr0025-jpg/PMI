@@ -1081,7 +1081,7 @@ export const Chat: React.FC = () => {
           });
           
         } else {
-          toast.error(`지원하지 않는 파일 형식입니다: ${file.name}`);
+          toast.error(`지원하지 않는 파일 형식입니다: ${file.name}\n지원 형식: 이미지(JPG, PNG, GIF, WebP), 텍스트(TXT, JSON, CSV, MD)`);
         }
       } catch {
         toast.error(`파일 처리 중 오류가 발생했습니다: ${file.name}`);
@@ -1164,7 +1164,10 @@ export const Chat: React.FC = () => {
   }, [currentSessionId, bookmarkedMessageIds, addBookmark, removeBookmark]);
 
   const handleTTS = useCallback((content: string) => {
-    if (!window.speechSynthesis) { toast.error('이 브라우저는 TTS를 지원하지 않습니다.'); return; }
+    if (!window.speechSynthesis) {
+      toast.error('이 브라우저는 TTS(음성 읽기)를 지원하지 않습니다.\nChrome, Edge, Safari 등 최신 브라우저를 사용해 주세요.');
+      return;
+    }
     if (window.speechSynthesis.speaking) {
       window.speechSynthesis.cancel();
       toast.info('읽기가 중지되었습니다.');
@@ -1177,8 +1180,16 @@ export const Chat: React.FC = () => {
     utter.rate = language === 'ko' ? 1.0 : 1.02;
     utter.pitch = 1.02;
     utter.volume = 1.0;
-    
-    const voices = window.speechSynthesis.getVoices();
+
+    // Chrome에서 getVoices()가 비동기로 로드되는 경우 대비
+    let voices = window.speechSynthesis.getVoices();
+    if (voices.length === 0) {
+      // voices가 아직 로드되지 않은 경우 짧은 대기 후 재시도
+      window.speechSynthesis.onvoiceschanged = () => {
+        voices = window.speechSynthesis.getVoices();
+      };
+      // 음성이 없어도 기본 음성으로 진행
+    }
     if (voices.length > 0) {
       const preferredNames = language === 'ko'
         ? ['sunhi', 'yuna', 'sora', 'heami', 'seoyeon', 'google']
@@ -1367,22 +1378,28 @@ export const Chat: React.FC = () => {
       return;
     }
 
-    // 60개 메시지마다 25 PMC 추가 요금 확인
+    // 60개 메시지마다 25 PMC 추가 요금 확인 (사전 고지 포함)
     const sessionMsgCount = currentMessages.length;
     const EXTRA_CHARGE_THRESHOLD = 60;
     const EXTRA_CHARGE_PMC = 25;
+    const PRE_NOTICE_OFFSET = 5;
+    // 사전 고지: 추가 과금 5메시지 전 알림
+    if (sessionMsgCount > 0 && sessionMsgCount % EXTRA_CHARGE_THRESHOLD === (EXTRA_CHARGE_THRESHOLD - PRE_NOTICE_OFFSET)) {
+      const nextChargeAt = sessionMsgCount + PRE_NOTICE_OFFSET;
+      toast(`${nextChargeAt}번째 메시지부터 긴 대화 추가 요금 ${EXTRA_CHARGE_PMC} PMC가 차감됩니다.`, { icon: 'ℹ️', duration: 6000 });
+    }
     if (sessionMsgCount > 0 && sessionMsgCount % EXTRA_CHARGE_THRESHOLD === 0) {
       const availPMC = getAvailablePMC();
       if (availPMC < EXTRA_CHARGE_PMC) {
-        toast.error(`긴 대화 추가 요금: ${EXTRA_CHARGE_PMC} PMC가 필요합니다. (현재 잔여 ${availPMC} PMC)`);
+        toast.error(`긴 대화 추가 요금: ${EXTRA_CHARGE_PMC} PMC가 필요합니다. (현재 잔여 ${availPMC} PMC)\n새 대화를 시작하시거나 PMC를 충전해 주세요.`);
         return;
       }
-      const charged = usePMC(EXTRA_CHARGE_PMC, `긴 대화 추가 요금 (${sessionMsgCount}번째 메시지)`);
+      const charged = useStore.getState().usePMC(EXTRA_CHARGE_PMC, `긴 대화 추가 요금 (${sessionMsgCount}번째 메시지)`);
       if (!charged) {
         toast.error('PMC 차감에 실패했습니다. 잠시 후 다시 시도해주세요.');
         return;
       }
-      toast.info(`긴 대화 추가 요금 ${EXTRA_CHARGE_PMC} PMC 차감됨`);
+      toast.info(`긴 대화 추가 요금 ${EXTRA_CHARGE_PMC} PMC가 차감되었습니다. (${sessionMsgCount}번째 메시지)`);
     }
 
     const chatPerfRunId = startChatPerfRun('handleSendMessage', STREAMING_DRAFT_V2);
@@ -1722,6 +1739,14 @@ export const Chat: React.FC = () => {
           if (streamReadError?.name === 'AbortError' || cancelRequestedRef.current) {
             throw new Error('ERR_CANCELLED');
           }
+          // 스트리밍 중단 시 부분 응답에 중단 표시 추가
+          if (accumulated && accumulated.trim() && assistantMessageId) {
+            const interruptedContent = accumulated + '\n\n---\n⚠️ *응답이 중단되었습니다. 네트워크 오류가 발생했을 수 있습니다. "재생성" 버튼을 눌러 다시 시도해 주세요.*';
+            if (STREAMING_DRAFT_V2) {
+              flushDraftMessage(interruptedContent, true);
+            }
+            finalizeMessageContent(sessionIdForThisRequest, assistantMessageId, interruptedContent);
+          }
           throw streamReadError;
         } finally {
           reader.releaseLock();
@@ -1847,7 +1872,7 @@ export const Chat: React.FC = () => {
 
       // 429 에러: 대기/나가기 선택 흐름
       if (errorCode.startsWith('ERR_RATE')) {
-        const waitContent = `현재 AI 요청이 많아 응답이 지연되고 있어요.\n\n이대로 기다리시면 1분 30초 안에 답변이 올 수 있어요. 계속 기다리시겠어요?`;
+        const waitContent = `현재 AI 요청이 많아 응답이 지연되고 있어요.\n\n이대로 기다리시면 30초 안에 답변이 올 수 있어요. 계속 기다리시겠어요?`;
         if (sid) {
           if (assistantMessageId) {
             finalizeMessageContent(sid, assistantMessageId, waitContent);
@@ -1866,11 +1891,15 @@ export const Chat: React.FC = () => {
             toast.dismiss(rateToastId);
             resolve(choice);
           };
-          const autoResolveId = window.setTimeout(() => finish('leave'), 90000);
+          const autoResolveId = window.setTimeout(() => finish('leave'), 30000);
           toast.custom(
             () => (
               <div className="flex flex-col gap-2 bg-white dark:bg-gray-800 shadow-lg rounded-lg p-4 border border-gray-200 dark:border-gray-700">
                 <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">현재 AI 요청이 많아 지연 중</span>
+                <p className="text-xs text-gray-500 dark:text-gray-400">약 30초 내에 재시도됩니다.</p>
+                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 mt-1">
+                  <div className="bg-blue-600 h-1.5 rounded-full animate-pulse" style={{ width: '60%' }} />
+                </div>
                 <div className="flex gap-2 mt-1">
                   <button
                     onClick={() => finish('wait')}
@@ -1883,7 +1912,7 @@ export const Chat: React.FC = () => {
                 </div>
               </div>
             ),
-            { duration: 90000, id: rateToastId }
+            { duration: 30000, id: rateToastId }
           );
         });
 
@@ -1898,8 +1927,8 @@ export const Chat: React.FC = () => {
             addMessage(sid, { id: crypto.randomUUID(), role: 'assistant' as const, content: `응답을 중단했어요. 불편을 드려 죄송해요. ${modelName} 크레딧 1회를 보상해드렸어요.`, modelId: currentModelId, timestamp: new Date().toISOString(), creditUsed: 0 });
           }
         } else {
-          // 90초 대기 후 재시도
-          await new Promise(r => setTimeout(r, 90000));
+          // 30초 대기 후 재시도
+          await new Promise(r => setTimeout(r, 30000));
           try {
             const liveMessages = useStore.getState().chatSessions.find(s => s.id === sid)?.messages || [];
             const retryBody = JSON.stringify({ modelId: currentModelId, messages: liveMessages.filter((m: any) => m.role !== 'assistant' || m.content).map((m: any) => ({ role: m.role, content: m.content })) });

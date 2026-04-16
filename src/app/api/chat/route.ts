@@ -1114,7 +1114,7 @@ async function callGrokImage(modelId: string, prompt: string): Promise<string> {
 export async function POST(request: NextRequest) {
   if (isStaticExportPhase) {
     return NextResponse.json(
-      { error: 'Chat API unavailable in static export.' },
+      { error: 'ERR_UNAVAILABLE', reason: '현재 채팅 API를 사용할 수 없습니다.' },
       {
         status: 501,
         headers: {
@@ -1141,7 +1141,8 @@ export async function POST(request: NextRequest) {
     if (!rateLimitResult.success) {
       return NextResponse.json(
         { 
-          error: 'Rate limit exceeded. Try again later.',
+          error: 'ERR_RATE',
+          reason: '요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.',
           retryAfter: Math.ceil((rateLimitResult.reset - Date.now()) / 1000)
         },
         { 
@@ -1161,7 +1162,7 @@ export async function POST(request: NextRequest) {
       requestBody = await request.json();
     } catch {
       return NextResponse.json(
-        { error: 'ERR_REQ_00', reason: 'Invalid request body.' },
+        { error: 'ERR_REQ_00', reason: '잘못된 요청 형식입니다.' },
         { status: 400 }
       );
     }
@@ -1283,7 +1284,7 @@ Example style:
     // 입력 검증
     if (typeof modelId !== 'string' || !modelId.trim() || !Array.isArray(messages) || messages.length === 0) {
       return NextResponse.json(
-        { error: 'ERR_REQ_00', reason: 'Invalid request.' },
+        { error: 'ERR_REQ_00', reason: '잘못된 요청입니다.' },
         { status: 400 }
       );
     }
@@ -1291,7 +1292,7 @@ Example style:
     // 메시지 길이 제한 (DoS 방지)
     if (messages.length > 100) {
       return NextResponse.json(
-        { error: 'Too many messages.' },
+        { error: 'ERR_REQ_00', reason: '메시지가 너무 많습니다. 새 대화를 시작해 주세요.' },
         { status: 400 }
       );
     }
@@ -1299,18 +1300,18 @@ Example style:
     // 각 메시지 내용 길이 제한 + 비정상 role 차단
     for (const msg of messages) {
       if (!msg || !['user', 'assistant', 'system'].includes(msg.role)) {
-        return NextResponse.json({ error: 'ERR_REQ_00', reason: 'Invalid message role.' }, { status: 400 });
+        return NextResponse.json({ error: 'ERR_REQ_00', reason: '잘못된 메시지 형식입니다.' }, { status: 400 });
       }
       if (typeof msg.content === 'string') {
         if (msg.content.length > 50000) {
           return NextResponse.json(
-            { error: 'ERR_REQ_00', reason: 'Message too long.' },
+            { error: 'ERR_REQ_00', reason: '메시지가 너무 깁니다.' },
             { status: 400 }
           );
         }
       } else if (Array.isArray(msg.content)) {
         if (msg.content.length > 24) {
-          return NextResponse.json({ error: 'ERR_REQ_00', reason: 'Message content is too complex.' }, { status: 400 });
+          return NextResponse.json({ error: 'ERR_REQ_00', reason: '메시지 내용이 너무 복잡합니다.' }, { status: 400 });
         }
         const isValidContentArray = msg.content.every((part: any) => {
           if (!part || typeof part !== 'object') return false;
@@ -1319,23 +1320,23 @@ Example style:
           return false;
         });
         if (!isValidContentArray) {
-          return NextResponse.json({ error: 'ERR_REQ_00', reason: 'Invalid message content format.' }, { status: 400 });
+          return NextResponse.json({ error: 'ERR_REQ_00', reason: '잘못된 메시지 내용 형식입니다.' }, { status: 400 });
         }
       } else {
-        return NextResponse.json({ error: 'ERR_REQ_00', reason: 'Invalid message content type.' }, { status: 400 });
+        return NextResponse.json({ error: 'ERR_REQ_00', reason: '지원하지 않는 메시지 형식입니다.' }, { status: 400 });
       }
     }
 
     // 마지막 사용자 메시지 검증 (고의 에러 방지)
     const lastUserMsg = findLastMessageByRole(messages, 'user');
     if (!lastUserMsg) {
-      return NextResponse.json({ error: 'ERR_REQ_00', reason: 'No user message found.' }, { status: 400 });
+      return NextResponse.json({ error: 'ERR_REQ_00', reason: '사용자 메시지를 찾을 수 없습니다.' }, { status: 400 });
     }
     if (lastUserMsg) {
       const content = typeof lastUserMsg.content === 'string' ? lastUserMsg.content.trim() : '';
       // 빈 메시지 차단
       if (!hasMeaningfulMessageContent(lastUserMsg.content)) {
-        return NextResponse.json({ error: 'ERR_REQ_00', reason: 'Empty message.' }, { status: 400 });
+        return NextResponse.json({ error: 'ERR_REQ_00', reason: '빈 메시지는 전송할 수 없습니다.' }, { status: 400 });
       }
       // 반복 문자 스팸 차단 (같은 문자가 200자 이상 반복)
       if (content.length > 200) {
@@ -1388,11 +1389,15 @@ Example style:
     ];
     const isPromptInjection = PROMPT_INJECTION_PATTERNS.some(p => p.test(lastContent));
     if (isPromptInjection) {
-      console.warn('[chat] Prompt injection attempt:', {
+      console.warn('[chat] Prompt injection attempt blocked:', {
         userId: session.userId, modelId,
         snippet: lastContent.slice(0, 200),
         ip: getClientIp(request),
       });
+      return NextResponse.json(
+        { error: 'ERR_BLOCKED', reason: '허용되지 않는 요청입니다. 정상적인 질문을 입력해 주세요.' },
+        { status: 400 }
+      );
     }
 
     // ── Layer 20: Shadow 모드 분기 ─────────────────────────────

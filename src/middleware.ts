@@ -769,7 +769,7 @@ export async function middleware(request: NextRequest, event?: NextFetchEvent) {
     return stripServerHeaders(NextResponse.redirect(url));
   }
 
-  const protectedPaths = ['/chat', '/dashboard', '/settings', '/configurator', '/checkout', '/feedback'];
+  const protectedPaths = ['/chat', '/dashboard', '/settings', '/configurator', '/checkout', '/feedback', '/debug'];
   const isProtectedPath = protectedPaths.some(p => pathname.startsWith(p));
   const isApiPath = pathname.startsWith('/api/');
 
