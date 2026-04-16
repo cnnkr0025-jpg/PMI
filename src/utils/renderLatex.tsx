@@ -1,3 +1,5 @@
+import DOMPurify from 'isomorphic-dompurify';
+
 let katexLib: typeof import('katex') | null = null;
 
 function getKatex() {
@@ -12,28 +14,31 @@ function getKatex() {
 }
 
 /**
- * 안전한 HTML 문자열 반환을 위한 sanitizer.
- * KaTeX 출력에서 위험한 태그와 속성을 제거합니다.
- * 단일 pass가 아닌 반복 적용으로 중첩/분할 우회를 방지합니다.
+ * DOM 기반 HTML sanitizer (DOMPurify).
+ * KaTeX 출력에서 위험한 태그, 속성, javascript: URI 등을 안전하게 제거합니다.
  */
 function sanitizeHtml(html: string): string {
-  let prev = '';
-  let result = html;
-  // 반복 적용하여 중첩된 패턴도 완전히 제거
-  while (result !== prev) {
-    prev = result;
-    result = result
-      .replace(/<script\b[^]*?<\/script\s*>/gi, '')
-      .replace(/<iframe\b[^]*?<\/iframe\s*>/gi, '')
-      .replace(/<object\b[^]*?<\/object\s*>/gi, '')
-      .replace(/<embed\b[^]*?>/gi, '')
-      .replace(/on\w+\s*=\s*["'][^"']*["']/gi, '')
-      .replace(/on\w+\s*=\s*[^\s>]+/gi, '')
-      .replace(/javascript\s*:/gi, '')
-      .replace(/<script\b/gi, '')
-      .replace(/<iframe\b/gi, '');
-  }
-  return result;
+  return DOMPurify.sanitize(html, {
+    ALLOWED_TAGS: [
+      'span', 'div', 'math', 'semantics', 'mrow', 'mi', 'mo', 'mn',
+      'msup', 'msub', 'mfrac', 'mover', 'munder', 'munderover',
+      'mtable', 'mtr', 'mtd', 'mtext', 'mspace', 'msqrt', 'mroot',
+      'menclose', 'mpadded', 'mphantom', 'mglyph', 'maligngroup',
+      'malignmark', 'annotation', 'annotation-xml',
+      'svg', 'line', 'path', 'g', 'rect', 'circle',
+      'br', 'em', 'strong', 'sup', 'sub',
+    ],
+    ALLOWED_ATTR: [
+      'class', 'style', 'aria-hidden', 'role',
+      'xmlns', 'encoding', 'mathvariant', 'stretchy', 'fence',
+      'separator', 'lspace', 'rspace', 'accent', 'accentunder',
+      'displaystyle', 'scriptlevel', 'width', 'height',
+      'd', 'viewBox', 'preserveAspectRatio', 'fill', 'stroke',
+      'x1', 'y1', 'x2', 'y2', 'cx', 'cy', 'r', 'rx', 'ry',
+    ],
+    FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form', 'input', 'textarea', 'select', 'button'],
+    FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover', 'onfocus', 'onblur'],
+  });
 }
 
 export function renderLatex(latex: string): string {

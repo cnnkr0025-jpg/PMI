@@ -104,7 +104,7 @@ export async function appendLedgerEvent(params: {
     .single();
 
   if (existing) {
-    if (process.env.NODE_ENV !== 'production') console.log('[ledger] idempotent - returning existing entry:', String(idempotencyKey).replace(/[\r\n]/g, '_').slice(0, 100));
+    if (process.env.NODE_ENV !== 'production') console.log('[ledger] idempotent - returning existing entry for user:', userId);
     return { success: true, entry: existing as LedgerEntry };
   }
 
