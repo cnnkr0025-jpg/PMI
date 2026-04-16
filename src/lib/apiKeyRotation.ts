@@ -77,7 +77,7 @@ class ApiKeyRotationManager {
       }
     }
     
-    if (openaiKeyCount === 0) {
+    if (openaiKeyCount === 0 && process.env.NODE_ENV !== 'production') {
       console.error('[API Key Manager] No OpenAI API keys found');
     }
 
@@ -133,6 +133,10 @@ class ApiKeyRotationManager {
     for (let i = 1; i <= 3; i++) {
       const key = process.env[`XAI_API_KEY_${i}`] || (i === 1 ? process.env.XAI_API_KEY : '');
       if (key) {
+        if (!validateApiKey(key, 'xai')) {
+          securityLog('warn', `xAI API 키 ${i} 형식이 올바르지 않습니다`, { keyMask: maskApiKey(key) });
+          continue;
+        }
         this.keyPools.xai.push({
           key,
           isAvailable: true,

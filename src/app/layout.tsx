@@ -27,6 +27,10 @@ const ServiceWorkerRegistrar = dynamic(
   () => import('@/components/ServiceWorkerRegistrar').then(mod => ({ default: mod.ServiceWorkerRegistrar })),
   { ssr: false }
 );
+const CookieConsent = dynamic(
+  () => import('@/components/CookieConsent').then(mod => ({ default: mod.CookieConsent })),
+  { ssr: false }
+);
 
 const inter = Inter({
   subsets: ['latin'],
@@ -137,6 +141,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               },
             }}
           />
+          <CookieConsent />
         </ThemeProvider>
       </body>
     </html>

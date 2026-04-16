@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
     const orderId = typeof body?.orderId === 'string' ? body.orderId : '';
     const orderToken = typeof body?.orderToken === 'string' ? body.orderToken : '';
     const requestAmount = Number(body?.amount || 0);
-    const isMockPayment = body?.isMockPayment === true || body?.isMockPayment === '1';
+    const isMockPayment = (body?.isMockPayment === true || body?.isMockPayment === '1') && process.env.NODE_ENV !== 'production';
 
     if (!orderId || !orderToken || !Number.isFinite(requestAmount) || requestAmount <= 0) {
       return NextResponse.json({ error: 'Invalid request' }, { status: 400 });

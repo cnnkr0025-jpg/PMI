@@ -1,3 +1,9 @@
+declare global {
+  interface Window {
+    __pmiQuotaWarned?: boolean;
+  }
+}
+
 import { createWithEqualityFn as create } from 'zustand/traditional';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { 
@@ -73,6 +79,16 @@ const flushPendingPersistWrites = () => {
       if (isQuotaError) {
         if (process.env.NODE_ENV !== 'production') {
           console.warn('[store] localStorage quota exceeded — skipping persist write for:', key);
+        }
+        // 사용자에게 저장 공간 부족 경고 표시
+        if (typeof window !== 'undefined' && !window.__pmiQuotaWarned) {
+          window.__pmiQuotaWarned = true;
+          try {
+            const { toast } = require('react-hot-toast');
+            toast('저장 공간이 부족합니다. 오래된 대화를 삭제하거나 대화 내보내기를 이용해 주세요.', { icon: '⚠️', duration: 8000 });
+          } catch {
+            // toast 로드 실패 시 무시
+          }
         }
         // 오래된 항목 정리 후 재시도
         try {

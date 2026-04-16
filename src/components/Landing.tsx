@@ -496,9 +496,12 @@ export const Landing: React.FC = () => {
               상호: {process.env.NEXT_PUBLIC_BIZ_NAME || 'PickMyAI'} | 대표: {process.env.NEXT_PUBLIC_BIZ_REPRESENTATIVE || '(대표자명)'} | 사업자등록번호: {process.env.NEXT_PUBLIC_BIZ_REGISTRATION_NO || '(등록번호)'}
             </p>
             <p>
-              통신판매업 신고번호: {process.env.NEXT_PUBLIC_BIZ_SALES_NO || '(신고번호)'} | 주소: {process.env.NEXT_PUBLIC_BIZ_ADDRESS || '(사업장 주소)'} | 이메일: {process.env.NEXT_PUBLIC_BIZ_EMAIL || '(이메일)'}
+              통신판매업 신고번호: {process.env.NEXT_PUBLIC_BIZ_SALES_NO || '(신고번호)'} | 주소: {process.env.NEXT_PUBLIC_BIZ_ADDRESS || '(사업장 주소)'}
             </p>
-            <p>호스팅 서비스: Vercel Inc. | AI, 이제 고르기도 쉬운 선택</p>
+            <p>
+              전화: {process.env.NEXT_PUBLIC_BIZ_PHONE || '(전화번호)'} | 이메일: {process.env.NEXT_PUBLIC_BIZ_EMAIL || '(이메일)'}
+            </p>
+            <p>호스팅 서비스: Vercel Inc. | 결제 서비스: 토스페이먼츠(주)</p>
           </div>
         </div>
       </footer>
