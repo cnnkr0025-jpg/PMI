@@ -1740,7 +1740,7 @@ export const Chat: React.FC = () => {
             throw new Error('ERR_CANCELLED');
           }
           // 스트리밍 중단 시 부분 응답에 중단 표시 추가
-          if (accumulated && accumulated.trim() && sessionIdForThisRequest && assistantMessageId) {
+          if (accumulated && accumulated.trim() && assistantMessageId) {
             const interruptedContent = accumulated + '\n\n---\n⚠️ *응답이 중단되었습니다. 네트워크 오류가 발생했을 수 있습니다. "재생성" 버튼을 눌러 다시 시도해 주세요.*';
             if (STREAMING_DRAFT_V2) {
               flushDraftMessage(interruptedContent, true);

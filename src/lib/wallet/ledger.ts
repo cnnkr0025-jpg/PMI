@@ -82,7 +82,10 @@ export async function appendLedgerEvent(params: {
 }): Promise<{ success: boolean; entry?: LedgerEntry; error?: string }> {
   const { userId, eventType, delta, idempotencyKey, intentTokenId, metadata, adminApprover } = params;
 
-  if (process.env.NODE_ENV !== 'production') console.log('[ledger] appendLedgerEvent called:', { userId, eventType, delta, idempotencyKey });
+  if (process.env.NODE_ENV !== 'production') {
+    const safeKey = String(idempotencyKey).replace(/[\r\n]/g, '_').slice(0, 100);
+    console.log('[ledger] appendLedgerEvent called:', { userId, eventType, delta, idempotencyKey: safeKey });
+  }
 
   // admin mutation 검증
   if ((eventType === 'admin_credit' || eventType === 'admin_debit') && !adminApprover) {
@@ -101,7 +104,7 @@ export async function appendLedgerEvent(params: {
     .single();
 
   if (existing) {
-    if (process.env.NODE_ENV !== 'production') console.log('[ledger] idempotent - returning existing entry:', idempotencyKey);
+    if (process.env.NODE_ENV !== 'production') console.log('[ledger] idempotent - returning existing entry:', String(idempotencyKey).replace(/[\r\n]/g, '_').slice(0, 100));
     return { success: true, entry: existing as LedgerEntry };
   }
 

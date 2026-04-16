@@ -12,16 +12,28 @@ function getKatex() {
 }
 
 /**
- * 안전한 HTML 문자열 반환을 위한 최소 sanitizer.
- * KaTeX 출력에서 <script>, on* 이벤트 핸들러 등을 제거합니다.
+ * 안전한 HTML 문자열 반환을 위한 sanitizer.
+ * KaTeX 출력에서 위험한 태그와 속성을 제거합니다.
+ * 단일 pass가 아닌 반복 적용으로 중첩/분할 우회를 방지합니다.
  */
 function sanitizeHtml(html: string): string {
-  return html
-    .replace(/<script[\s\S]*?<\/script>/gi, '')
-    .replace(/<iframe[\s\S]*?<\/iframe>/gi, '')
-    .replace(/on\w+\s*=\s*["'][^"']*["']/gi, '')
-    .replace(/on\w+\s*=\s*[^\s>]+/gi, '')
-    .replace(/javascript\s*:/gi, '');
+  let prev = '';
+  let result = html;
+  // 반복 적용하여 중첩된 패턴도 완전히 제거
+  while (result !== prev) {
+    prev = result;
+    result = result
+      .replace(/<script\b[^]*?<\/script\s*>/gi, '')
+      .replace(/<iframe\b[^]*?<\/iframe\s*>/gi, '')
+      .replace(/<object\b[^]*?<\/object\s*>/gi, '')
+      .replace(/<embed\b[^]*?>/gi, '')
+      .replace(/on\w+\s*=\s*["'][^"']*["']/gi, '')
+      .replace(/on\w+\s*=\s*[^\s>]+/gi, '')
+      .replace(/javascript\s*:/gi, '')
+      .replace(/<script\b/gi, '')
+      .replace(/<iframe\b/gi, '');
+  }
+  return result;
 }
 
 export function renderLatex(latex: string): string {
